@@ -759,7 +759,8 @@ proc cell_cfg() { local answer
 	 	strdef question
 		question="Cell configuration will no longer be modifiable. Proceed?"
 	 	dbox=new HBox()
-	 	answer=dbox.dialog(question,"yes","no")
+	 	answer = 1
+		if (numarg() == 0) { answer=dbox.dialog(question,"yes","no") }
 		if (answer) {
 			cellbox.unmap()
 		   CELL_CFG=0

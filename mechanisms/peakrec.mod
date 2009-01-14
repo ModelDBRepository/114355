@@ -19,6 +19,7 @@ ASSIGNED {
 	peak
 	time
 	v_init
+	v
 }
 
 INITIAL {

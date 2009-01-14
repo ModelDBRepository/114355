@@ -1,0 +1,121 @@
+
+proc twopoint_parameters() { local id
+	 save_dt=dt
+	 dt=1/200
+	 veq=-60
+	 tstop=180
+	 sprint(str_tstop,"tstop = %d ms",tstop)
+	 STRT_EPSP=100    	 // input start time
+	 STRT_BPAP=140
+	 STRT_SF=95
+	 id=int(BRANCH.numlogsyn*2/3)
+	 logsyn1=BRANCH.logsynlist.object(id)
+	 id=int(BRANCH.numlogsyn*1/3)
+	 logsyn2=BRANCH.logsynlist.object(id)
+}
+
+proc twopoint_stim() {
+	evnt=0
+	objref trvl_syn1,trvl_syn2
+	access logsyn1.sec.sec
+	trvl_syn1=new ScalExp2Syn(logsyn1.loc)
+	trvl_syn1.tau1=SYNTAU1
+	trvl_syn1.tau2=SYNTAU2
+	trvl_syn1.e=SYNE
+	trvl_syn1.eta=0.00005*dt
+	trvl_syn1.enable=1
+	trvl_syn1.sf=1
+	trvl_syn1.veq=veq
+	trvl_syn1.sfmax=SFMX
+	trvl_syn1.enablestrt=STRT_SF
+	access logsyn2.sec.sec
+	trvl_syn2=new ScalExp2Syn(logsyn2.loc)
+	trvl_syn2.tau1=SYNTAU1
+	trvl_syn2.tau2=SYNTAU2
+	trvl_syn2.e=SYNE
+	trvl_syn2.eta=0.00005*dt
+	trvl_syn2.enable=1
+	trvl_syn2.sf=1
+	trvl_syn2.veq=veq
+	trvl_syn2.sfmax=SFMX
+	trvl_syn2.enablestrt=STRT_SF
+	check_input=new Vector()
+	check_input.append(1)
+	check_input.append(0)
+	check_timing=new Vector()
+	check_timing.append(STRT_EPSP)
+	check_timing.append(STRT_EPSP+dt)
+ 	check_input.play(&evnt,check_timing)
+	syn=new NetCon(&evnt,trvl_syn1,0.9,0,SYNG)
+	 sprint(cmd,"%s imp = new IClamp(0.5)",ORIGIN_NAME)
+	 execute(cmd)
+	 imp.dur = DURap
+	 imp.amp = AMPap
+	 imp.del = STRT_BPAP
+}
+/*
+proc 2point_recvec() { local loc1,loc2
+	 2point_time=new Vector()
+	 2point_time.indgen(STRT,tstop,dt) // record only from start of EPSP
+	 2point_1rec=new Vector()
+	 loc1=logsyn1.loc
+	 2point_1rec.record(&logsyn1.sec.sec.v(loc),EPSP_time)
+	 2point_2rec=new Vector()
+	 loc1=logsyn1.loc
+	 2point_2rec.record(&logsyn1.sec.sec.v(loc),EPSP_time)
+	 2point_somarec=new Vector()
+	 sprint(cmd,"2point_somarec.record(&%s.v(0.5),EPSP_time)",ORIGIN_NAME)
+	 execute(cmd)
+}
+*/	
+proc twopoint_undo(){
+/*	 objref 2point_time 
+	 objref 2point_1ec
+	 objref 2point_2ec
+	 objref 2point_somarec
+*/
+	 objref syn		
+	 objref logsyn1,logsyn2
+	 objref trvl_syn1,trvl_syn2
+	 objref imp
+}
+
+proc twopoint_plot() {
+	strdef sma
+	strdef lbl
+	graphItem.size(0,tstop,-80,40)
+	sprint(cmd,"access %s",ORIGIN_NAME)
+	execute(cmd) // all NetStims attached logically to soma (it doesn't matter where you put them)
+	sprint(sma,"%s.v(0.5)",ORIGIN_NAME)
+	graphItem.addexpr(sma,1,2)
+	loc1=logsyn1.loc
+	graphItem.addexpr("logsyn1.sec.sec.v(loc1)",2,2)
+	graphItem.addexpr("trvl_syn1.sf",2,2)
+	loc2=logsyn2.loc
+	graphItem.addexpr("logsyn2.sec.sec.v(loc2)",4,2)
+	graphItem.addexpr("trvl_syn2.sf",4,2)
+	graphItem.addexpr("veq",3,2)
+	sprint(lbl,"%s (%3.0f) and %s (%3.0f)",logsyn1.logsyn_name,logsyn1.dist,logsyn2.logsyn_name,logsyn2.dist)
+	 graphItem.align(0.5, 1)	
+	 graphItem.label(0.5,1, lbl)
+	graphItem.align(0,0)	
+	graphItem.label(0.5,0,"time (ms)")
+}
+
+proc twopoint_begin_simulation() { local eta
+	 twopoint_stim()
+	 eta=SFSpms
+	 SFSpms=0
+	 set_SFS(1)
+//	 2point_recvec()
+	 twopoint_plot()
+	 str_status="Running 2 points"
+ 	 run()
+	graphItem.size(STRT_SF,tstop,-80,40)
+	 SFSpms=eta
+	 dt=save_dt
+	 set_SFS(1)
+	 str_status="Ready"
+}
+
+ 

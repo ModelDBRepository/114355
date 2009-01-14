@@ -1,0 +1,128 @@
+// create single EPSP at each synapse and record the voltage measured at that synapse and
+// at the soma
+
+proc BPAP_check_parameters() {
+	 tstop=TSTOP_BPAP_check
+	 sprint(str_tstop,"tstop = %d ms",tstop)
+	 STRT=5
+	 str_statistics1=""
+	 str_statistics2=""
+	bbox=new VBox()
+	bbox.intercept(1)
+		xpanel("stats")
+		xvalue("tolerance1","T1_BPAP_check")
+		xvalue("tolerance2","T2_BPAP_check")
+		xvalue("window","WINDOW_BPAP_check")
+		xvarlabel(str_statistics1)
+		xvarlabel(str_statistics2)
+		xbutton("ok","BPAP_check_spike_statistics()")
+		xpanel()
+	bbox.intercept(0)
+	bbox.map("Spike Statistics",850,0,400,200)
+}
+IC=0
+proc BPAP_check_stim() {
+	 if (IC) { sprint(cmd,"axon imp = new IClamp(0.5)")
+	 } else { sprint(cmd,"%s imp = new IClamp(0.5)",ORIGIN_NAME) }
+	 execute(cmd)
+	 imp.dur = DURap
+	 imp.amp = AMPap
+	 imp.del = STRT
+}
+
+proc BPAP_check_recvec() { local loc
+	 BPAP_time=new Vector()
+	 BPAP_time.indgen(STRT,tstop+dt,dt) // record only from start of EPSP
+//	 loc=LOGSYN.loc
+//	 check_BPAPrec=new Vector(BPAP_time.size)
+//	 check_BPAPrec.record(&LOGSYN.sec.sec.v(loc),BPAP_time)
+	 check_sBPAPrec=new Vector(BPAP_time.size)
+	 sprint(cmd,"check_sBPAPrec.record(&%s.v(0.5),BPAP_time)",ORIGIN_NAME)
+	 execute(cmd0)
+}
+
+proc BPAP_check_undo(){
+	 objref BPAP_time
+//	 objref check_BPAPrec
+	 objref check_sBPAPrec
+	 objref imp
+}
+
+proc BPAP_check_plot() {
+	strdef sma
+	graphItem.size(0,tstop,-80,40)
+	loc=LOGSYN.loc
+	graphItem.addexpr("imp.i*10+v_init",3,1)
+	graphItem.addvar("LOGSYN.sec.sec.v(loc)",2,1)
+	sprint(sma,"%s.v(0.5)",ORIGIN_NAME)
+	graphItem.addvar(sma,1,1)
+/*
+	sprint(sma,"%s.ik(0.5)*10+v_init",ORIGIN_NAME)
+	graphItem.addexpr(sma,4,1)
+	sprint(sma,"%s.ina(0.5)*10+v_init",ORIGIN_NAME)
+	graphItem.addexpr(sma,5,1)
+*/
+	sprint(lbl,"BPAP (mV) %3.2f microns from soma",LOGSYN.dist)
+	graphItem.align(0.5, 1)
+	graphItem.label(0.5,1,lbl)
+	graphItem.align(0,0)
+	graphItem.label(0.5,0,"time (ms)")
+}
+
+proc BPAP_check_spike_statistics() { local i,inside,volt,cont,t1,t2,i1,i2,vhalf,max,min,avg
+	max=check_sBPAPrec.max-v_init
+	vhalf=max/2+v_init
+	inside=0
+	i1=-1
+	i2=-1
+	for (i=0;i<check_sBPAPrec.size;i+=1) {
+		volt=check_sBPAPrec.x(i)
+		if (!inside && abs(volt-vhalf)<=T1_BPAP_check) {
+			inside=1
+			t1=BPAP_time.x(i)
+	   		i1=i
+			sprint(str_statistics1,"i1=%g t1=%g volt=%g vhalf=%g dv=%g",i1,t1,volt,vhalf,abs(volt-vhalf))
+		} else if (inside && abs(volt-vhalf)<=T2_BPAP_check) {
+			inside=0
+			t2=BPAP_time.x(i)
+			i2=i
+			sprint(str_statistics2,"i2=%g t2=%g volt=%g vhalf=%g dv=%g",i2,t2,volt,vhalf,abs(volt-vhalf))
+			break
+		}
+	}
+	di=i2-i1
+	if (t2-t1==dt || i1>=i2 || i1<0 || i2<0) {
+		str_status="Change tolerance and try again!"
+	} else if (i1-WINDOW_BPAP_check*di<0) {
+		str_status="Change WINDOW_BPAP_check and try again!"
+	} else {
+		avg=check_sBPAPrec.sum(i1-WINDOW_BPAP_check*di,i2+WINDOW_BPAP_check*di)/((2*WINDOW_BPAP_check+1)*di) // i1-(i2-i1); i2+(i2-i1)
+		min=check_sBPAPrec.min(i2,check_sBPAPrec.size-1)
+		graphItem.beginline()
+		graphItem.line(t1,vhalf)
+		graphItem.line(t2,vhalf)
+		graphItem.flush()
+		graphItem.beginline()
+		graphItem.line(BPAP_time.x(i1-WINDOW_BPAP_check*di),max+v_init)
+		graphItem.line(BPAP_time.x(i2+WINDOW_BPAP_check*di),max+v_init)
+		graphItem.flush()
+		sprint(str_status,"max=%3.2g min=%3.3g t=%3.3g avg=%3.3g vhalf=%3.3g width=%3.3g",max,min,t1,avg,vhalf,t2-t1)
+	}
+}
+
+proc BPAP_check_begin_simulation() { local enable
+	enable=SCALE_ENABLE
+	SCALE_ENABLE=0
+	set_SCALE_ENABLE(1)
+	BPAP_check_stim()
+	BPAP_check_recvec()
+	BPAP_check_plot()
+ 	str_status="Running BPAP check"
+ 	my_run()
+	BPAP_check_spike_statistics()
+	SCALE_ENABLE=enable
+	set_SCALE_ENABLE(1)
+//	str_status="Ready"
+}
+
+

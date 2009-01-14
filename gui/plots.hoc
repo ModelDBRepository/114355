@@ -1,0 +1,1417 @@
+//////////////////////////////////////////////////////////////////////////////////////////////
+//                                        Plot Functions
+//                                        ==============
+//////////////////////////////////////////////////////////////////////////////////////////////
+
+proc prepare_shape_export() {
+	 shape_plot_export=new Shape()
+	 shape_plot_export.action("shape_section_selection()")
+ 	 shape_plot_export.exec_menu("View = plot")
+	 shape_plot_export.label(0,0,MORPH.full_name)
+ 	 shape_plot_export.exec_menu("Zoom in/out")
+	 shape_export=$1 // flag
+}
+
+proc shape_export_all() { local i
+	 for i=0,NLOGSYNS-1 {
+	 	 shape_plot_export.point_mark(logsynlist.object(i).syn,2)
+	 }
+	 for i=0,BRANCH.numlogsyn-1 {
+	 	 shape_plot_export.point_mark(BRANCH.logsynlist.object(i).syn,4)
+	 }
+}
+
+proc shape_export_trunk() {
+	 shape_plot_export.color_list(dendrite_apical_trunk_section_list,2)
+}
+
+proc shape_export_obliques() {
+	 shape_plot_export.color_list(dendrite_apical_obliques_section_list,3)
+}
+
+proc shape_export_none() {
+	 shape_plot_export.point_mark_remove()
+}
+
+proc prepare_shape() {
+	 shape_plot=new Shape()
+	 shape_plot.action("shape_section_selection()")	// cell.hoc
+ 	 shape_plot.exec_menu("View = plot")
+ 	 shape_plot.exec_menu("10% Zoom in")
+	 logsyn_mark()
+}
+
+proc shape_selsec() { local color
+	color = $1
+	shape_plot.color(color)
+	if (shape_export) { shape_plot_export.color(color) }
+}
+
+proc selsec_line() { local i, j
+	for i = 0, numplotter - 1 {
+		plotterlist.object(i).selsec_line()
+	}
+}
+/*
+proc selsec_line() { local i, j
+	for i = 0, numplotter - 1 {
+		plotterlist.object(i).selsec_line(1)
+		for j = 0, NLOGSYNS - 1 {
+			logsyn = logsynlist.object(j)
+			logsyn.sec.sec {
+				ifsec selsec_list.object(SELSEC).s {
+					plotterlist.object(i).selsec_line(logsyn)
+				}
+			}
+		}
+		plotterlist.object(i).selsec_line(0)
+	}
+}
+*/
+proc shape_trunk() {
+	 shape_plot.color_list(dendrite_apical_trunk_section_list,2)
+}
+
+proc shape_obliques() {
+	 shape_plot.color_list(dendrite_apical_obliques_section_list,3)
+}
+
+proc shape_clear() {
+	 forall shape_plot.color(1)
+}
+
+// browser selection
+proc plot_branch_logsyn() { local i
+	 for i=0,numplotter-1 {
+	 	 plotterlist.object(i).rehighlight()
+	 }
+	 shape_plot.point_mark_remove()
+ 	 if (shape_export) { shape_plot_export.point_mark_remove() }
+	 logsyn_mark()
+}
+
+// mark logical synapses on shape plot
+proc logsyn_mark() { local i,color
+	 for i=0,BRANCH.numlogsyn-1 {
+	 	 shape_plot.point_mark(BRANCH.logsynlist.object(i).syn,4)
+	 	 if (shape_export) { shape_plot_export.point_mark(BRANCH.logsynlist.object(i).syn,4) }
+	 }
+	 shape_plot.point_mark(LOGSYN.syn,2)
+	 if (shape_export) { shape_plot_export.point_mark(LOGSYN.syn,2) }
+}
+
+proc subgroup_mark() { local i
+	 for i=0,SUBG.nlogsyns-1 {
+	 	 shape_plot.point_mark(SUBG.logsynlist.object(i).syn,5)
+	 	 if (shape_export) { shape_plot_export.point_mark(SUBG.logsynlist.object(i).syn,5) }
+	 }
+	 for i=0,numplotter-1 {
+	 	 plotterlist.object(i).subgroup_mark()
+	 }
+}
+
+// user specified synapses to be marked
+proc criterion_mark() { local i,id,color
+	id=$1
+	color=$2
+	for i=0,numplotter-1 {
+		 plotterlist.object(i).criterion_mark(id,color)
+	}
+ 	shape_plot.point_mark(logsynlist.object(id).syn,color)
+	if (shape_export) { shape_plot_export.point_mark(logsynlist.object(id).syn,color) }
+}
+
+proc real_time_plot() {
+	newPlotV()
+}
+
+// ====================================================================================================
+proc create_shape_plot_post_script_file() {
+	 create_post_script_file(shape_plot_export)
+}
+
+proc create_real_time_post_script_file() {
+	 create_post_script_file(graphItem)
+}
+
+// create a post script file for the plot
+proc create_post_script_file() {
+	 psgraph=$o1
+	 psfile=new File()
+	 psfile.chooser("w","Write Plot","*.eps","accept","cancel","../records/results/plots")
+	 psfile.chooser()
+	 psfile.getname(psfilename)
+	 if (strcmp(psfilename,"")) {
+	 	psgraph.printfile(psfilename)
+	 }
+	 psfile.close()
+}
+
+proc delete_post_script_file() { local answer
+	 psfile=new File()
+	 psfile.chooser("r","Delete Plot","*.eps","accept","cancel","../records/results/plots")
+	 psfile.chooser()
+	 psfile.getname(psfilename)
+	 if (strcmp(psfilename,"")) {
+	 	strdef question
+		dbox=new HBox()
+		sprint(question,"Are you sure you want to delete %s?",psfilename)
+		answer=dbox.dialog(question,"yes","no")
+		psfile.unlink()
+	 }
+	 psfile.close()
+}
+// ====================================================================================================
+// individual channel type on a specific section list
+proc plot_channel_paramter() { local i,ymax,xmax
+	strdef param_name,seclist_name,lbl
+	param_name=$s1
+	seclist=new SectionList()
+	seclist=$o2
+	seclist_name=$s3
+	graphItem.erase_all()
+	graphItem.color(2)
+	graphItem.brush(2)
+	xmax=0
+	ymax=0
+	y=0
+	shape_clear()
+	forsec seclist {
+		graphItem.beginline()
+		for (x) {
+			sprint(cmd,"y=%s(x)",param_name)
+			execute(cmd)
+			graphItem.line(distance(x),y)
+			if (y>ymax) { ymax=y }
+			if (distance(x)>xmax) { xmax=distance(x) }
+			if (y>0) { shape_plot.color(3)
+			} else { shape_plot.color(7) }
+		}
+		graphItem.flush()
+	}
+	graphItem.size(0,1000,0,1.5*ymax)
+	sprint(lbl,"%s at %s",param_name,seclist_name)
+ 	graphItem.align(0.5,1)
+ 	graphItem.label(0.5,1,lbl)
+}
+
+// all channels on a specific section list
+proc plot_subtree_channels() { local c,sign
+	strdef param_lbl,param_name
+	param_lbl=$s1
+	param_name=$s2
+	seclist=new SectionList()
+	seclist=$o3
+	sign=$4
+	c=$5
+	graphItem.color(c)
+	yy=0
+	forsec seclist {
+		graphItem.beginline()
+		for (x) {
+			xx=distance(x)*sign
+			sprint(cmd,"yy=%s(x)",param_name)
+			execute(cmd)
+			if (yy) {
+				graphItem.line(xx,yy)
+				if (xx>xmax) { xmax=xx } // update maximum abcsissa value
+				if (xx<xmin) { xmin=xx } // update minimum abcsissa value
+				if (yy>ymax) { ymax=yy } // update maximum ordinate value
+			}
+		}
+		graphItem.flush()
+	}
+	graphItem.label(param_lbl)
+}
+
+// ====================================================================================================
+
+// plot graphs from all plotter instances on one graph
+proc multiple_plotter_plot() { local i,j,nx,ny,c,minx,miny,maxx,maxy,tmp
+	graphItem.erase_all()
+	minx=0
+	miny=0
+	maxx=0
+	maxy=0
+	for i=0,numplotter-1 {
+		c=i+1
+		graphItem.color(c)
+		plotter=plotterlist.object(i)
+		nx=plotter.xvec.size
+		ny=plotter.yvec.size
+		if (nx==ny) {
+			graphItem.beginline()
+			for j=0,nx-1 {
+				graphItem.mark(plotter.xvec.x(j),plotter.yvec.x(j),"O",5,c,2)
+				graphItem.line(plotter.xvec.x(j),plotter.yvec.x(j))
+			}
+			graphItem.flush()
+			tmp=plotter.xvec.min()
+			if (tmp<xmin) { xmin=tmp }
+			tmp=plotter.yvec.min()
+			if (tmp<ymin) { ymin=tmp }
+			tmp=plotter.xvec.max()
+			if (tmp>xmax) { xmax=tmp }
+			tmp=plotter.yvec.max()
+			if (tmp>ymax) { ymax=tmp }
+			sprint(lbl,"graph %d",i)
+			graphItem.label(lbl)
+			graphItem.size(xmin,xmax,ymin,ymax)
+		}
+	}
+}
+
+// ====================================================================================================
+
+
+// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+
+// plots a graph branch-wise with specified abcissa and ordinate, who's values are the values at
+// the time of call for the template's procedures
+// either 3 arguments: abcissa,ordinate and color or one argument: color
+begintemplate Plotter
+
+public rehighlight
+public plotter_gui
+public export_mode
+public xvec,yvec, recvec		// allows outside vector access to x and y data on the graph
+public graph_export
+public export_width,export_height
+public subgroup_mark
+public criterion_mark	// user specified synapses to be marked
+public selsec_line
+public abcissa_selection, ordinate_selection, gtype // for external menu selection
+public external_export_new, external_keep_lines, external_export_enable
+
+external tree,tstop,REALTIME,RDPNUM,RIPNUM,TSTOP
+external VEQ,v_init
+external reclist
+external logsynlist
+external SUBG
+external SLCT_LOGSYN,SLCT_BRANCH,LOGSYN
+external NLOGSYNS,NSYNS
+external NBINS
+external shape_plot,shape_plot_export,shape_export,logsyn_mark
+external RECstart
+external create_post_script_file
+external NSELSECS, selsec_list
+
+//objref selected_branch,prev_selected_branch
+objref graph,graph_export,plot_logsyn,plot_branch,hlight_branch
+objref expbox,gbox
+objref xvec,yvec,tvec,recvec,tmpvec
+objref rcrd
+objref recvar_abc		  // abcissa for variable histogram
+objref bin
+
+strdef cmd,vecname,recname
+strdef lbl,clbl,tlbl,slbl,dlbl
+strdef xlbl,ylbl
+
+proc init() {
+	id=$1
+	 if (numarg()==2) { recid=$2
+	 } else { recid=0 }
+	 gtype=0	// graph type: 0=distance; 1=time; 2=histogram; 3=raster; 4=peak;
+	 		// 5=time2peak; 6=ISI; 7=cumulative; 8=average (on synapses);
+			// 9=time average; 10=distance histogram; 11=raster histogram
+			// 12=input frequency; 13=combined; 14=time standard deviation;
+			// 15 = time derivative
+	 slider_time=0	// a normalized value ranging from 0 to 100 (like the slider)
+	 maxtime=0
+	 xmin=0						 // minimum abscissa value
+	 xmax=1000					 // maximum abscissa value
+	 xval=0
+	 yval=0
+	 recvec_size=0
+	 recvec_dt=0
+	 recvec_start=0
+	 rcrd=reclist.object(recid)
+	 prev_gtype=0
+	 proc_type = 0	// the type of the processed vector of an original record (e.g. time std of Vm(t)) 
+	 export_width=350//500
+	 export_height=280//300
+	 export_shape_size=5 // size of shapes on export branch plots
+	 export_mode=0		// export yaxis mode
+	 export_new() // copy of the graph for export purposes
+	 expbox.unmap()
+	 veq=0			  // flag: 0=don't show VEQ line
+	 vinit=0		  // flag: 0=don't show v_init line
+	 events=0		  // flag: 0=don't show synaptic events
+	 xvec=new Vector()	// abscissa data vector for external use
+	 yvec=new Vector()	// ordinate data vector for external use
+	 export=1		// flag: 1=enabled
+	 export_branch=0	// flag: 1=show branch mark on export plot
+	 export_branch_only=0	// flag: 1= plot selected branch only
+	 export_synapse=0	// flag: 1=show synapse mark on export plot
+	 export_keep=0		// flag: 1=keep lines
+	 export_num=0		// number of graphs kept
+	 hist_normalize=1	// flag: histogram ordinate is 0=number of events; 1=frequency
+	 t1=0			// leftmost time of a time graph
+	 t2=0			// rightmost time of a time graph
+	 combined_type=1	// 1=ratio; 2=difference
+	 raster_hist_type	// 1=synapse; 2=time
+	 transpose=0		// 1=switch between x and y axes
+}
+
+proc plotter_gui() {
+	 gbox=new VBox()
+	 gbox.intercept(1)
+	 	graph=new Graph()
+		ordinate_selection(recid)
+		graph.menu_action("Veq","if (gtype==1 || gtype==8 || gtype==9 || gtype==14 || gtype == 15) { veq=1-veq plot_Veq() }")
+		graph.menu_action("Vrest","if (gtype==1 || gtype==8 || gtype==9 || gtype==14 || gtype == 15) { vinit=1-vinit plot_v_init() }")
+		graph.menu_action("synaptic events","if (gtype==1 || gtype==8 || gtype == 15) { events=1-events plot_synaptic_events(LOGSYN) }")
+		graph.menu_action("time average","if (gtype==1 || gtype==8 || gtype == 15) { average_voltage(LOGSYN) }")
+		graph.menu_action("time std","if (gtype==1 || gtype==8 || gtype == 15) { std(LOGSYN) }")
+		graph.menu_action("spike frequency","if (gtype==1 || gtype==8) { spike_frequency() }")
+//		graph.menu_action("dist average","if (gtype==0) { average_distance_profile() }")
+		graph.menu_action("dist average","average_distance_profile()")
+		graph.menu_action("adjust ordinate","graph_resize(2)")
+		graph.menu_action("normalize histogram","hist_normalize=1-hist_normalize")
+		graph.menu_action("y inverse","rcrd.recvar_inverse()")
+		graph.menu_action("axes transpose","transpose=1-transpose")
+		graph.crosshair_action("histogram_logsyn_select")
+  	 	xpanel("menubar",1)
+	 	 	interaction_menu()
+	 		isolation_menu()
+	 		soma_menu()
+	 		type_menu()
+	 		export_menu()
+		xpanel()
+	 	xpanel("time",1)
+	 		xslider(&slider_time,0,100,"if (rectype==1 && !REALTIME) {graph_reprepare(0)}")
+//			xvalue("t","slider_time",0,"if (rectype==1 && !REALTIME) {graph_reprepare(0)}")
+	 	xpanel()
+	 gbox.intercept(0)
+	 gbox.map()
+}
+
+proc export_new() {
+	expbox=new HBox()
+	expbox.intercept(1)
+	 	xpanel("export")
+		 	xstatebutton("enabled",&export)
+			xstatebutton("mark branch",&export_branch)
+			xstatebutton("branch only",&export_branch_only)
+			xstatebutton("mark synapse",&export_synapse)
+			xstatebutton("keep lines",&export_keep,"export_num = 0 if (export_keep) { export_num = 1 }") 
+			xmenu("mode")
+				xbutton("normal","graph_export.yaxis(0)")
+				xbutton("square","graph_export.yaxis(2)")
+				xbutton("erase axes","graph_export.yaxis(3)")
+			xmenu()
+//			xvalue("width","export_width",1,"export_reset_view()")
+//			xvalue("height","export_height",1,"export_reset_view()")
+			xbutton("save","create_post_script_file(graph_export)")
+		xpanel()
+		graph_export=new Graph()
+//		graph_export.yaxis(2)
+	expbox.intercept(0)
+//	expbox.map("export",1550-export_width,400-export_height*id,export_width,export_height)
+	expbox.map("export",0, 50+export_height*id,export_width,export_height)
+	// screen width 1250; screen height 950
+//	graph_export.view(0,0,1000,10,1250-export_width,950-export_height,export_width,export_height)
+}
+
+// manipulate export panel automatically from an external procedure
+proc external_export_new() {
+	export_new()	
+}
+
+proc external_export_enable() {
+	export = $1
+}
+
+proc external_keep_lines() {
+	export_keep = $1
+}
+
+proc export_erase_axes() { local mode
+	 mode=$1
+	 if (mode) { graph_export.yaxis(0)
+	 } else { graph_export.yaxis(3) }
+}
+
+// -----------------------------------------------------------------------------
+
+proc rehighlight() {
+	 if (gtype!=2) { // for distance, time and raster plots
+	 	graph_reprepare(0)
+	 }
+}
+
+proc tree_profile() { local i
+	 graph.erase()
+	 for i=0,tree.numbranch-1 {
+		 if (i!=SLCT_BRANCH) { branch_profile(i,1) }
+	 }
+	 branch_profile(SLCT_BRANCH,4)
+	 logsyn_coordinates(tree.branchlist.object(SLCT_BRANCH).logsynlist.object(SLCT_LOGSYN))
+	 graph.mark(xval,yval,"O",5,2,2) // mark selected synapse
+	 if (export && export_synapse) { graph_export.mark(xval,yval,"O",5,2,2) }
+}
+
+proc subgroup_mark() { local i
+	 for i=0,SUBG.nlogsyns-1 {
+	 	 logsyn_coordinates(SUBG.logsynlist.object(i))
+		 graph.mark(xval,yval,"O",5,5,2)
+	 	 if (export) {
+		 	graph_export.mark(xval,yval,"O",5,5,2)
+		 }
+	 }
+}
+
+// external criterion of synapses to be marked (user passes a logsyn id, and it is marked)
+proc criterion_mark() { local id,color
+	id=$1	// logsyn id
+	color=$2
+	logsyn_coordinates(logsynlist.object(id))
+	graph.mark(xval,yval,"O",5,color,2)
+ 	 if (export) {
+	 	graph_export.mark(xval,yval,"O",10,color,2)
+	 }
+}
+
+proc selsec_line() { local type, on
+	if (recloc==0) { // relevant only for synaptic records
+		graph.color(5)
+		graph.brush(3)
+		graph.beginline()
+	 	if (export) {
+			graph_export.color(5)
+			graph_export.brush(3)
+			graph_export.beginline()
+		}
+	 	yval=0		  // yval is reset in case a record vector doesn't exist yet (revec_size=0)
+		for i = 0, tree.numbranch-1 {
+			plot_branch=tree.branchlist.object(i)
+			for j = 0, plot_branch.numlogsyn-1 {
+				for k = 0, NSELSECS-1 {
+					plot_branch.logsynlist.object(j).sec.sec {
+						ifsec selsec_list.object(k).s {
+							logsyn_coordinates(plot_branch.logsynlist.object(j))
+							graph.line(xval, yval)
+						 	if (export) {
+								graph_export.line(xval, yval)
+							}
+						}
+					}
+				}
+			}
+		}	
+		graph.flush()
+		graph.color(1)
+		graph.brush(1)
+	 	if (export) {
+			graph_export.flush()
+			graph_export.color(1)
+			graph_export.brush(1)
+		}
+	}
+}			
+
+/*
+proc selsec_line() { local type, on
+	type = argtype(1)
+	if (type == 0) {	// turn line on or off
+		on = $1
+		if (on) {
+			graph.brush(3)
+			graph.color(5)
+			graph.beginline
+			if (export) {
+				graph_export.brush(3)
+				graph_export.color(5)
+				graph_export.beginline
+			}
+		} else {
+			graph.brush(1)
+			graph.color(1)
+			graph.flush
+			if (export) {
+				graph_export.brush(1)
+				graph_export.color(1)
+				graph_export.flush
+			}
+		}
+	} else if (type ==1) {
+		logsyn_coordinates($o1)
+		graph.line(xval, yval)
+		if (export) {
+			graph_export.line(xval, yval)
+		}
+	}
+}
+*/
+proc branch_profile() { local i,c,ce,size
+	 if (recloc==0) { // relevant only for synaptic records
+	 	strdef shape
+	 	xvec=new Vector()
+		yvec=new Vector()
+	 	plot_branch=tree.branchlist.object($1)
+	 	c=$2
+		ce=2+export_num
+		shape="o"
+		size=export_shape_size
+		graph.beginline()
+	 	if (export) { graph_export.beginline() }
+	 	yval=0		  // yval is reset in case a record vector doesn't exist yet (revec_size=0)
+	 	for i=0,plot_branch.numlogsyn-1 {
+			logsyn_coordinates(plot_branch.logsynlist.object(i))
+			graph.brush(1)
+			graph.color(c)
+			graph.mark(xval,yval,"O",5,c,2)
+			graph.line(xval,yval)
+			xvec.append(xval)
+			yvec.append(yval)
+			if (export) {
+			   // if export_keep=1 each added graph will have different colors
+			   if (export_branch && c==4) {
+//			   	ce=3+export_num
+				shape="O"
+//				size=int(1.4*export_shape_size)
+			   }
+			   if (!export_branch_only || c==4) {
+			   	graph_export.mark(xval,yval,shape,size,ce,2)
+//			   	graph_export.color(ce+1)
+			   	graph_export.line(xval,yval)
+			   }
+			}
+	 	}
+	 	graph.flush()
+	 	if (export) { graph_export.flush() }
+	 graph.color(1)
+	 }
+}
+
+proc logsyn_coordinates() {
+	plot_logsyn=$o1
+	if (gtype==0) { // distance plot
+		if (rectype==0) { plot_logsyn.getrec(recdep,rectype,recnum,&yval)
+		} else {
+			plot_logsyn.getrec(recdep,rectype,recnum,recvec)
+			if (recvec_size) { yval=recvec.x(slider_time/100*(recvec_size-1)) }
+		}
+	} else if (gtype==4 || gtype==5 || gtype==9 || gtype==12 || gtype==13 || gtype==14) { // peak plot or time-average plot
+//		yval=rcrd.recvar_vec.x(plot_logsyn.id)
+		yval=recvec.x(plot_logsyn.id)
+	}
+	plot_logsyn.getrec(2,0,0,&xval)
+//	if (plot_branch.subtree==0) { xval*=-1 } // basal sub-tree
+}
+
+proc time_trace() { local i,c
+	 if (recvec_size) {
+		plot_logsyn=$o1 // reference to the specified synapse to be plotted
+	 	if (gtype==8) { // average of time traces across synapses
+		   rcrd.recvec_synapse_average()
+		   recvec=rcrd.recvec_avg
+		} else if (recloc==1) {
+		   recvec=rcrd.recvec.c
+		} else if (gtype==13) {
+		   recvec=rcrd.recvar_vec.c
+		} else {
+		   plot_logsyn.getrec(recdep,rectype,recnum,recvec)
+		   rcrd.recvar_vec=recvec.c
+			if (gtype == 15) {
+		   		recvec.deriv(rcrd.recvec_dt/1000,2)
+			}
+	 	}
+	 }
+	 yval=0		  // yval is reset in case a record vector doesn't exist yet (revec_size=0)
+	 graph.beginline()
+	 if (export) { graph_export.beginline() }
+	 for i=0,recvec_size-1 {
+		yval=recvec.x(i)
+		xval=(recvec_start+i*recvec_dt)/1000//i*recvec_dt
+		if (recvec_size<=20) { graph.mark(xval,yval,"O",5,1,2) }
+		graph.line(xval,yval)
+		if (export) { graph_export.line(xval,yval) }
+	 }
+	 graph.flush()
+	 if (export) { graph_export.flush() }
+	 plot_synaptic_events(plot_logsyn)
+	 plot_Veq()
+	 plot_v_init()
+}
+
+proc average_voltage() { local x1,x2,t1,t2,dt,vavg
+	graph.getline(-1,xvec,yvec)
+ 	if (xvec.size>2) { // at least two data points
+		dt=xvec.x(1)-xvec.x(0)
+		t1=graph.size(1)
+		t2=graph.size(2)
+		x1=(t1-xvec.x(0))/dt
+		x2=(t2-xvec.x(0))/dt
+		if (x2>=yvec.size) { x2=yvec.size-1 }
+		vavg=yvec.sum(x1,x2)/(x2-x1) // since we have discrete data points we need an ordinary average
+		sprint(lbl,"%2.2f mV",vavg)
+		graph.align(1,0)
+		graph.label(1,0,lbl)
+		graph.beginline(2,1)
+		graph.line(t1,vavg)
+		graph.line(t2,vavg)
+		graph.flush()
+		if (export) {
+			graph_export.beginline(2,1)
+			graph_export.line(t1,vavg)
+			graph_export.line(t2,vavg)
+			graph_export.flush()
+		}
+	}
+}
+
+proc std() { local x1,x2,t1,t2,dt,std
+	graph.getline(-1,xvec,yvec)
+ 	if (xvec.size>2) { // at least two data points
+		dt=xvec.x(1)-xvec.x(0)
+		t1=graph.size(1)
+		t2=graph.size(2)
+		x1=(t1-xvec.x(0))/dt
+		x2=(t2-xvec.x(0))/dt
+		if (x2>=yvec.size) { x2=yvec.size-1 }
+		std=yvec.stdev(x1,x2)
+		sprint(lbl,"%2.2f mV",std)
+		graph.align(1,0)
+		graph.label(1,0,lbl)
+	}
+}
+
+proc spike_frequency() { local x1,x2,t1,t2
+	t1=graph.size(1)
+	t2=graph.size(2)
+	x1=(1000*t1-rcrd.recvec_start)/rcrd.recvec_dt
+	x2=(1000*t2-rcrd.recvec_start)/rcrd.recvec_dt
+	rcrd.spike_times(x1,x2)
+	sprint(lbl,"%2.2f Hz",rcrd.Hz)
+	graph.align(1,0)
+	graph.label(1,0,lbl)
+}
+
+proc average_distance_profile() { local i,avg
+//	if (gtype==0 && rectype==0) { // distance variable plot
+		avg=0
+		for i=0,NLOGSYNS-1 {
+			plot_logsyn=logsynlist.object(i)
+			if (gtype==0) {
+				plot_logsyn.getrec(recdep,rectype,recnum,&yval)
+			} else {
+				yval=recvec.x(i)
+			}
+			avg+=yval*plot_logsyn.numsyns
+		}
+		avg/=NSYNS
+		sprint(lbl,"%2.2f",avg)
+		graph.align(1,0)
+		graph.label(1,0,lbl)
+		graph.beginline(2,1)
+		graph.line(xmin,avg)
+		graph.line(xmax,avg)
+		graph.flush()
+		if (export) {
+			graph_export.beginline(2,1)
+			graph_export.line(xmin,avg)
+			graph_export.line(xmax,avg)
+			graph_export.flush()
+		}
+//	}
+}
+
+proc plot_synaptic_events() { local i,n,y1,y2
+	if ((gtype==1 || gtype==8) && events) {
+		plot_logsyn=$o1 // reference to the specified synapse to be plotted
+		plot_logsyn.getrec(0,2,0,recvec) // get the synapses input vector
+		n=recvec.size()
+		t1=graph.size(1)
+		t2=graph.size(2)
+		y1=graph.size(3)
+		y2=graph.size(4)
+		while (n) {
+			n-=1
+			xval=recvec.x(n)/1000
+			if (xval<t1) { break }
+			if (xval<=t2) {
+				graph.beginline(2,1)
+				graph.line(xval,y1)
+				graph.line(xval,y2)
+				graph.flush()
+				if (export) {
+//			   		graph_export.beginline(2,1)
+			   		graph_export.beginline()
+			   		graph_export.line(xval,v_init)
+			   		graph_export.line(xval,v_init+5)
+			   		graph_export.flush()
+				}
+		 	}
+		}
+	}
+}
+
+proc plot_Veq() {
+	 if ((gtype==1 || gtype==8 || gtype==9 || gtype==14) && veq) {
+		graph.beginline(3,1)
+		graph.line(graph.size(1),VEQ)
+		graph.line(graph.size(2),VEQ)
+		graph.flush()
+		if (export) {
+	   	   graph_export.beginline(3,1)
+	   	   graph_export.line(graph_export.size(1),VEQ)
+	   	   graph_export.line(graph_export.size(2),VEQ)
+	   	   graph_export.flush()
+	    }
+	}
+}
+
+proc plot_v_init() {
+	 if ((gtype==1 || gtype==8 || gtype==9 || gtype==14) && vinit) {
+		graph.beginline(2,1)
+		graph.line(graph.size(1),v_init)
+		graph.line(graph.size(2),v_init)
+		graph.flush()
+		if (export) {
+	   	   graph_export.beginline(2,1)
+	   	   graph_export.line(graph_export.size(1),v_init)
+	   	   graph_export.line(graph_export.size(2),v_init)
+	   	   graph_export.flush()
+	    }
+	}
+}
+
+proc histgrm() { local n,i
+	n=numarg()
+	if (n) { width=rcrd.recvar_histogram(hist_normalize,recvec) // distance bins
+	} else { width=rcrd.recvar_histogram(hist_normalize) } // value bins
+	 if (width) {
+	 	minbin=rcrd.binlist.object(0).center-width/2
+	 	graph.beginline()
+	 	if (export) { graph_export.beginline() }
+	 	for i=0,NBINS-1 {
+			bin=rcrd.binlist.object(i)
+			graph.line(bin.center,bin.value)
+			graph.mark(bin.center,bin.value,"O",5,1,2)
+			if (export) {
+			   graph_export.line(bin.center,bin.value)
+			   graph_export.mark(bin.center,bin.value,"O",5,1,2)
+			}
+		}
+	 	graph.flush()
+	 	if (export) { graph_export.flush() }
+	 }
+}
+
+// only after a histogram has been computed a cumulative graph may be drawn
+proc cumulative() { local i
+	 if (width) {
+	 	xvec=new Vector()
+		yvec=new Vector()
+	 	graph.beginline()
+	 	if (export) { graph_export.beginline() }
+	 	for i=0,NBINS-1 {
+			bin=rcrd.binlist.object(i)
+			graph.line(bin.center,bin.accumulate)
+			graph.mark(bin.center,bin.accumulate,"O",5,1,2)
+			xvec.append(bin.center) // this is just for outside access to the ploted data points
+			yvec.append(bin.accumulate)
+			if (export) {
+			   graph_export.line(bin.center,bin.accumulate)
+			   graph_export.mark(bin.center,bin.accumulate,"O",5,1+export_num,2)
+			}
+		}
+	 	graph.flush()
+	 	if (export) { graph_export.flush() }
+	 }
+}
+
+proc raster() { local i,j,c,s,n,k0,k1
+	tvec=new Vector() // for time histogram
+	for i=0,NLOGSYNS-1 {
+		if (i==LOGSYN.id && export_synapse) { c=2 s=4
+		} else { c=1 s=2 }
+	 	plot_logsyn=logsynlist.object(i)
+		objref recvec
+		plot_logsyn.getrec(recdep,rectype,recnum,recvec)
+		n=recvec.size
+		xvec=new Vector()
+		xvec=recvec.c()
+		xvec.mul(1/1000)
+		tvec.append(xvec)
+		// presently, all inputs per logsyn are on the same input vector
+		// split the input vector into the various synapses included in the logsyn
+//		plot_logsyn.syn_input()
+		yvec=new Vector(n)
+		yvec.fill(plot_logsyn.dist)
+		/*
+		k0=0
+		for j=0,plot_logsyn.numsyns-1 {
+			k1=k0+plot_logsyn.syninput.x(j)-1
+			yvec.fill(plot_logsyn.syndist.x(j),k0,k1)
+			k0=k1+1
+		}
+		*/
+		if (transpose) {
+			tmpvec=new Vector()
+			tmpvec=xvec.c
+			xvec=yvec.c
+			yvec=tmpvec.c
+		}
+		yvec.mark(graph,xvec,"O",s,c,2)
+		if (export) { yvec.mark(graph_export,xvec,"O",s,c,2) }
+	}
+	if (export) { // soma zero line
+		graph_export.beginline()
+		graph_export.line(xmin,0)
+		graph_export.line(xmax,0)
+		graph_export.flush()
+	}
+}
+
+proc raster_synapse_histogram() { local i,j,k0,k1,c,s,n,xx,yy
+	for i=0,NLOGSYNS-1 {
+		if (i==LOGSYN.id && export_synapse) { c=2 s=2//4
+		} else { c=1 s=2 }
+	 	plot_logsyn=logsynlist.object(i)
+/*		plot_logsyn.syn_input(t1,t2)
+		for j=0,plot_logsyn.numsyns-1 {
+			xx=plot_logsyn.syninput.x(j)/(t2-t1)
+			yy=plot_logsyn.syndist.x(j)
+*/
+			xx = plot_logsyn.input.where("[]",t1*1000,t2*1000).size/(t2-t1)
+			yy = plot_logsyn.dist
+			graph.beginline()
+			graph.line(0,yy)
+			graph.line(xx,yy)
+			graph.flush()
+			if (export) {
+				graph_export.beginline()
+				graph_export.line(0,yy)
+				graph_export.line(xx,yy)
+				graph_export.flush()
+			}
+//		}
+	}
+}
+
+proc raster_time_histogram() { local i
+	xvec=new Vector()
+	xvec.indgen(t1,t2,(t2-t1)/NBINS)
+	yvec=new Vector()
+	yvec=tvec.histogram(t1,t2,(t2-t1)/NBINS)
+	yvec.remove(0)
+	yvec.mul(NBINS/(t2-t1)/1000)
+	for i=0,yvec.size-1 {
+		graph.beginline()
+		graph.line(xvec.x(i),0)
+		graph.line(xvec.x(i),yvec.x(i))
+		graph.flush()
+		if (export) {
+			graph_export.beginline()
+			graph_export.line(xvec.x(i),0)
+			graph_export.line(xvec.x(i),yvec.x(i))
+			graph_export.flush()
+		}
+	}
+}
+
+// -----------------------------------------------------------------------------
+
+proc histogram_logsyn_select() { local i,binnum
+	 if ((gtype==2 || gtype==10) && recloc==0) {
+	 	for i=0,NBINS-1 {
+			bin=rcrd.binlist.object(i)
+			graph.mark(bin.center,bin.value,"O",5,1,2)
+			if (export) { graph_export.mark(bin.center,bin.value,"O",5,1,2) }
+		}
+	 	binnum=rcrd.bins.indwhere(">=",$1) // returns the index of the FIRST element
+	 	bin=rcrd.binlist.object(binnum)
+		graph.mark(bin.center,bin.value,"O",5,5,2)
+		if (export) { graph_export.mark(bin.center,bin.value,"O",5,5,2) }
+		shape_plot.point_mark_remove()
+		if (shape_export) { shape_plot_export.point_mark_remove() }
+	 	logsyn_mark()
+	 	for i=0,bin.logsynlist.count()-1 {
+	 		shape_plot.point_mark(bin.logsynlist.object(i).syn,5)
+	 		if (shape_export) { shape_plot_export.point_mark(bin.logsynlist.object(i).syn,5) }
+	 	}
+	 }
+}
+// -----------------------------------------------------------------------------
+
+proc ordinate_selection() {
+	 if (!REALTIME) {
+		if (rcrd.constant==0) {
+			rcrd.reset_record()
+		}
+	}
+	 rcrd=reclist.object($1)
+	if (rcrd.constant==0) {
+		rcrd.read_record()
+	}
+	 // for vectors
+	 recvec_size=rcrd.recvec_size
+	 recvec_dt=rcrd.recvec_dt
+	 recvec_start=rcrd.recvec_start
+	 // ----------
+	 recname=rcrd.recname
+	 recloc=rcrd.recloc
+	 recdep=rcrd.recdep
+	 rectype=rcrd.rectype
+	 proc_type = rectype	// by default there is no processed record so it will be considered the same type as the original record
+	 recnum=rcrd.recnum
+	 abcissa_selection()
+}
+
+proc abcissa_selection() { local relevant
+	 relevant=0 // flag: 0=irrelevant abcissa; 1=relevant
+	 if (gtype==0) { // distance abcissa
+	 	if (recloc==0 && rectype!=2) { // dendritic
+		prev_gtype=0
+		   xmin=reclist.object(13).minaxis
+		   xmax=reclist.object(13).maxaxis
+		   ymin=rcrd.minaxis
+		   ymax=rcrd.maxaxis
+		   export_mode=0
+		   xlbl="distance from soma (um)"
+		   ylbl=rcrd.recname
+		   relevant=1
+		}
+	 } else if (gtype==1) {// time abcissa
+	    if (rectype==1) {
+		   prev_gtype=1
+		   if (recloc==1 && rectype==1) { rcrd.spike_times(0,rcrd.recvec_size) }
+//		   xmin=recvec_start//0//
+		   xmax=(recvec_start+(recvec_size-1)*recvec_dt)/1000//recvec_size*recvec_dt//
+		   xmin=xmax-1
+		   if (xmin<recvec_start) { xmin=recvec_start/1000 }
+		   ymin=rcrd.minaxis
+		   ymax=rcrd.maxaxis
+		   export_mode=2
+		   xlbl="time (sec)"
+		   ylbl=rcrd.recname
+		   relevant=1
+		}
+	 } else if (gtype==2) {// histogram
+	    if (rectype==0 || prev_gtype==2 || prev_gtype==4 || prev_gtype==5 || prev_gtype==7 || prev_gtype==9 || prev_gtype==12 || prev_gtype==13 || gtype==14) {
+		prev_gtype=2
+		   ymin=0
+		   ymax=1
+		   xmin=rcrd.varmin
+		   xmax=rcrd.varmax
+		   export_mode=0
+		   xlbl=rcrd.recname
+		   ylbl="frequency"
+		   relevant=1
+		}
+	 } else if (gtype==3) { // data vector (raster)
+		prev_gtype=3
+		xmin=(TSTOP-1000)/1000
+		if (xmin<0) { xmin=0 }
+		xmax=TSTOP/1000
+		ymin=-300
+		ymax=900
+		export_mode=2
+		xlbl="time (sec)"
+		ylbl="distance from soma"
+		relevant=1
+	 } else if (gtype==4) {// peaks
+	    if (recloc==0 && rectype==1) {
+		prev_gtype=4
+		   xmin=-300
+		   xmax=900
+		   ymin=0
+		   ymax=rcrd.maxaxis-rcrd.minaxis
+		   export_mode=0
+		   xlbl="distance from soma (um)"
+		   sprint(ylbl,"peak %s",rcrd.recname)
+		   relevant=1
+		}
+	 } else if (gtype==5) {// time to peak
+	    if (recloc==0 && rectype==1) {
+		prev_gtype=5
+		   xmin=reclist.object(13).minaxis
+		   xmax=reclist.object(13).maxaxis
+		   ymin=0
+		   ymax=recvec_size*recvec_dt
+		   export_mode=0
+		   xlbl="distance from soma (um)"
+		   sprint(ylbl,"time to peak (ms)",rcrd.recname)
+		   relevant=1
+		}
+	 } else if (gtype==6) {// ISI histogram
+	    if (rectype=1 && recloc==1) {
+		prev_gtype=6
+//		   rcrd.spike_times()
+		   spike_frequency()
+		   rcrd.isi_calculation()
+		   ymin=0
+		   ymax=1
+		   xmin=0//rcrd.varmin
+		   xmax=rcrd.varmax
+		   export_mode=0
+		   xlbl="ISI (ms)"
+		   ylbl="frequency"
+		   relevant=1
+		}
+	 } else if (gtype==7) {// cumulative
+	    if (prev_gtype==2) { // may only follow a histogram plot
+		prev_gtype=7
+		   ylbl="cumulative frequency"
+		   export_mode=0
+		   relevant=1
+		}
+	 } else if (gtype==8) {// average on synapses
+	    if (prev_gtype==1) { // may only follow a time plot
+		   if (recloc==0 && rectype==1) {
+		   	  prev_gtype=8
+		   	  ylbl="average on synapses"
+			  export_mode=0
+		   	  relevant=1
+		   }
+	    }
+	 } else if (gtype==9) {// time_average (like peak and time2peak)
+	    if (recloc==0 && rectype==1) {
+		prev_gtype=9
+		proc_type = 0		// although the original record is of type=1, this vector is of type=0
+		xmin=-300
+		xmax=900
+		ymin=rcrd.minaxis
+		ymax=rcrd.maxaxis
+		export_mode=0
+		xlbl="distance from soma (um)"
+		sprint(ylbl,"time average of %s",rcrd.recname)
+		relevant=1
+	    }
+	 } else if (gtype==10) {// distance histogram (plotted in distance bins)
+	    if (prev_gtype==2 || prev_gtype==4 || prev_gtype==5 || prev_gtype==7 || prev_gtype==12) {
+		prev_gtype=10
+		   ymin=0
+		   ymax=1
+		   xmin=rcrd.varmin
+		   xmax=rcrd.varmax
+		   export_mode=0
+		   xlbl=rcrd.recname
+		   ylbl="frequency"
+		   relevant=1
+	    }
+	 } else if (gtype==11) {	// raster histogram
+		if (prev_gtype==3 || prev_gtype==11) {
+			raster_hist_type=$1
+			t1=graph.size(1)
+			t2=graph.size(2)
+			prev_gtype=11
+			xmin=0
+			xmax=100
+			ymin=-300
+			ymax=900
+			export_mode=2
+			xlbl="input freq (Hz)"
+			ylbl="distance from soma"
+			relevant=1
+		}
+	 } else if (gtype==12) {// input frequencies
+	    if (recloc==0 && rectype==2) {
+		prev_gtype=12
+		   xmin=-300
+		   xmax=900
+		   ymin=0
+		   ymax=5
+		   export_mode=0
+		   xlbl="distance from soma (um)"
+		   ylbl="input frequency (Hz)"
+		   relevant=1
+		}
+	} else if (gtype==13) { // combined ratio
+//		if (rectype==0 || prev_gtype==2 || prev_gtype==4 || prev_gtype==5 || prev_gtype==7 || prev_gtype==9 || prev_gtype==12) {
+//		if (prev_gtype==1 || prev_gtype==2 || prev_gtype==4 || prev_gtype==5 || prev_gtype==7 || prev_gtype==9 || prev_gtype==12) {
+			prev_gtype=13
+			combined_type=$1	// 1=ratio; 2=difference
+			xmin=-300
+			xmax=900
+			ymin=0
+			ymax=10
+			export_mode=0
+			relevant=1
+//		}
+	 } else if (gtype==14) {// time_standard deviation (like peak and time2peak)
+	    if (recloc==0 && rectype==1) {
+		prev_gtype=14
+		proc_type = 0		// although the original record is of type=1, this vector is of type=0
+		   xmin=-300
+		   xmax=900
+		   ymin=rcrd.minaxis
+		   ymax=rcrd.maxaxis
+		   export_mode=0
+		   xlbl="distance from soma (um)"
+		   sprint(ylbl,"time std of %s",rcrd.recname)
+		   relevant=1
+	    }
+	 } else if (gtype==15) {// time derivative
+	    if (prev_gtype==1) { // may only follow a time plot
+		   if (recloc==0 && rectype==1) {
+		   	  ylbl="time derivative"
+			  export_mode=0
+		   	  relevant=1
+		   }
+	    }
+	}
+	if (relevant) { graph_reprepare(1)
+	} else { gtype=prev_gtype }
+}
+
+proc interaction_menu() {
+	xmenu("interaction")
+		xmenu("distance")
+			xbutton(reclist.object(0).recname,"gtype=0 ordinate_selection(0)")
+			xbutton(reclist.object(1).recname,"gtype=0 ordinate_selection(1)")
+//			xbutton(reclist.object(19).recname,"gtype=0 ordinate_selection(19)")
+//			xbutton(reclist.object(20).recname,"gtype=0 ordinate_selection(20)")
+			xbutton(reclist.object(2).recname,"gtype=0 ordinate_selection(2)")
+		xmenu()
+		xmenu("time")
+			xbutton(reclist.object(3).recname,"gtype=0 ordinate_selection(3)")
+			xbutton(reclist.object(4).recname,"gtype=0 ordinate_selection(4)")
+//			xbutton(reclist.object(21).recname,"gtype=0 ordinate_selection(21)")
+			xbutton(reclist.object(5).recname,"gtype=0 ordinate_selection(5)")
+		xmenu()
+		xmenu("synaptic measures")
+			xbutton(reclist.object(6).recname,"gtype=0 ordinate_selection(6)")
+			xbutton(reclist.object(7).recname,"gtype=0 ordinate_selection(7)")
+			xbutton(reclist.object(8).recname,"gtype=0 ordinate_selection(8)")
+		xmenu()
+		xmenu("input")
+			xbutton("raster","gtype=3 ordinate_selection(9)") // raster plot
+		 	xbutton("syn hist","gtype=11 abcissa_selection(1)")
+			xbutton("time hist","gtype=11 abcissa_selection(2)")
+		xmenu()
+	xmenu()
+}
+
+proc isolation_menu() {
+	 xmenu("isolation",1)
+	 	xmenu("EPSP")
+	 		xbutton(reclist.object(10).recname,"gtype=0 ordinate_selection(10)")
+	 		xbutton(reclist.object(11).recname,"gtype=0 ordinate_selection(11)")
+	 	xmenu()
+	 	xbutton(reclist.object(12).recname,"gtype=0 ordinate_selection(12)")
+		xbutton(reclist.object(18).recname,"gtype=0 ordinate_selection(18)")
+	 xmenu()
+}
+
+proc soma_menu() {
+	 xmenu("soma",1) // only time abcissa relevant for soma plots
+	 xbutton(reclist.object(14).recname,"gtype=1 ordinate_selection(14)")
+	 xbutton(reclist.object(15).recname,"gtype=1 ordinate_selection(15)")
+	 xbutton(reclist.object(16).recname,"gtype=1 ordinate_selection(16)")
+	 xbutton("ISI","gtype=6 ordinate_selection(14)") // select Soma V(t)
+	 xmenu()
+}
+
+proc type_menu() {
+	 xmenu("type",1)
+	 xmenu("time")
+	 	xbutton("time","gtype=1 abcissa_selection()")
+	 	xbutton("time average","gtype=9 abcissa_selection()")
+	 	xbutton("time std","gtype=14 abcissa_selection()")
+	 	xbutton("synapse average","gtype=8 abcissa_selection()")
+	 	xbutton("time derivative","gtype=15 abcissa_selection()")
+	 xmenu()
+	 xmenu("peak")
+	 	xbutton("peak","gtype=4 abcissa_selection()")
+	 	xbutton("time2peak","gtype=5 abcissa_selection()")
+	 xmenu()
+	 xbutton("frequency","gtype=12 abcissa_selection()")
+	 xmenu("histogram")
+	 	xbutton("histogram","gtype=2 abcissa_selection()")
+	 	xbutton("distance histogram","gtype=10 ordinate_selection(13)")
+	 	xbutton("cumulative","gtype=7 abcissa_selection()")
+	 xmenu()
+	 xmenu("combined")
+	 	xbutton("copy 1","rcrd.copy_combined(1)")
+	 	xbutton("copy 2","rcrd.copy_combined(2)")
+		xbutton("1/2","gtype=13 abcissa_selection(1)")
+		xbutton("1-2","gtype=13 abcissa_selection(2)")
+	 xmenu()
+/*
+	 xmenu("distance")
+	 	xbutton("distance","gtype=0 abcissa_selection()")
+	 	xbutton("histogram","gtype=10 ordinate_selection(13)")
+	 xmenu()
+*/
+	xbutton("distance","gtype=0 ordinate_selection(13)")
+	 xmenu()
+}
+
+proc export_menu() {
+	xbutton("export","export_new()")
+}
+
+proc graph_resize() { local ymn,ymx,cond
+	 // $0=don't touch; $1=use predifined size; $2=rescale ordinate
+	 cond=$1
+	 if (cond) {
+	 	if (cond==1) { // initialize graph size according to predefined coordinates
+	 	   graph.size(xmin,xmax,ymin,ymax)
+	 	   if (export) { graph_export.size(xmin,xmax,ymin,ymax) }
+	 	} else {
+	   	  graph.exec_menu("View = plot")
+	   	  ymn=graph.size(3)
+	   	  ymx=graph.size(4)
+	   	  graph.size(xmin,xmax,ymn,ymx)
+	   	  if (export) {	graph_export.size(xmin,xmax,ymn,ymx) }
+	 	}
+	 }
+}
+
+
+
+proc graph_label() {
+	 if (export) {
+	 	graph_export.align(0.5,1)
+	 	graph_export.label(0.5,1,lbl)
+	 	graph_export.align(0.5,0)
+	 	graph_export.label(0.5,0,xlbl)
+	 	graph_export.align(0,0.5)
+	 	graph_export.label(0,0.5,ylbl)
+	 	graph_export.align(0,0)
+	 	graph_export.label(0,0,clbl)
+	 }
+	 sprint(lbl,"%s %s",lbl,clbl)
+	 graph.align(0.5,1)
+	 graph.label(0.5,1,lbl)
+}
+
+proc graph_reprepare() { local cond,TIME,vec
+	 // 0=don't touch
+	 cond=$1
+	 strdef albl
+	 no_time=0 // flag: 1=don't show time in the title (static plot not in real time)
+	 if (REALTIME) { TIME=t
+	 } else { if (rectype==0 || gtype==1 ) { vec=0 // not a vector record
+	   		} else { TIME=recvec_start+slider_time/100*(recvec_size-1)*recvec_dt
+	 }}
+	 graph.erase_all()
+	 if (export && !export_keep) { graph_export.erase_all() }
+	 if (gtype==0) { albl="distance"
+	 } else { albl="time"}
+	 clbl="" // configuration
+	 tlbl="" // time
+	 slbl="" // synapse
+	 dlbl="" // display variables (sf and initial sf)
+	 if (recdep!=0) { // configuration
+	 	sprint(clbl,"(RIP%d)",RIPNUM)
+	 } else {
+	    sprint(clbl,"(RIP%d RDP%d)",RIPNUM,RDPNUM)
+	 }
+	 if (gtype==0 && (rectype==1 || (rectype==0 && REALTIME))) { // distance plot at a given time
+	 	sprint(tlbl," (%g ms)",TIME)
+	 }
+	 if (recloc==0 && gtype==1 && rectype==1) { // time plot at a given synapse
+	 	sprint(slbl," (%s)",LOGSYN.logsyn_name)
+	 }
+	 if (!rcrd.record_exists) { // record does not exist
+	 	if (rcrd.record_disp) { sprint(dlbl,"NO RECORD! (real time)")
+		} else { dlbl="NO RECORD!" }
+		graph.align(0.5,0.7)
+		graph.label(0.5,0.7,dlbl)
+	 }
+	 if (gtype==2 || gtype==10) { // histogram
+	 	sprint(lbl,"%s histogram",recname)
+	 } else if (gtype==4) {
+	 	sprint(lbl,"peak %s vs distance",recname)
+	 } else if (gtype==5) {
+	 	sprint(lbl,"time to peak %s vs distance",recname)
+	 } else if (gtype==6) {
+	 	sprint(lbl,"ISI histogram CV=%1.2f",rcrd.CV)
+	 } else if (gtype==7) {
+	 	sprint(lbl,"%s cumulative graph",recname)
+	 } else if (gtype==8) {
+	 	sprint(lbl,"%s average across synapses",recname)
+	 } else if (gtype==9) {
+	 	sprint(lbl,"time average of %s vs distance",recname)
+	 } else if (gtype==14) {
+	 	sprint(lbl,"time std of %s vs distance",recname)
+	 } else if (gtype==15) {
+	 	sprint(lbl,"%s time derivative",recname)
+	 } else {// regular plot
+	    sprint(lbl,"%s vs %s%s%s",recname,albl,tlbl,slbl)
+		if (recloc==1 && rectype==1) { sprint(lbl,"%s at %2.2f Hz",lbl,rcrd.Hz) }
+	 }
+	 if (cond) { graph_resize(cond) }
+	 graph_label()
+	 if (rcrd.record_exists || rcrd.record_disp) {
+	 	if (gtype==0) {
+		   tree_profile() // yval against distance from soma
+//		   graph_resize(2)
+	 	} else if (gtype==1 || gtype==8 || gtype == 15) {
+		   time_trace(LOGSYN) // yval against time
+		} else if (gtype==2 || gtype==6) {
+		   histgrm() // histogram
+		} else if (gtype==3) {
+		   raster() // raster plot
+		} else if (gtype==4) { // peak for time vectors
+		   rcrd.recvec_peak()
+		   recvec=rcrd.recvar_vec.c
+		   tree_profile()
+		} else if (gtype==5) { // time to peak for time vectors
+		   rcrd.recvec_time2peak()
+		   recvec=rcrd.recvar_vec.c
+		   tree_profile()
+		} else if (gtype==7) {
+		   cumulative() // cumulative
+		} else if (gtype==9) { // time average for time vectors
+		   rcrd.recvec_time_average()
+		   recvec=rcrd.recvar_vec.c
+		   tree_profile()
+		} else if (gtype==10) {
+		   histgrm(recvec) // distance bin histogram
+		} else if (gtype==11) {
+			if (raster_hist_type==1) {
+				raster_synapse_histogram()
+			} else if (raster_hist_type==2) {
+				raster_time_histogram()
+			}
+		} else if (gtype==12) { // input frequency
+		   rcrd.recvec_input_frequency()
+		   recvec=rcrd.recvar_vec.c
+		   tree_profile()
+		} else if (gtype==13) { // combined
+		   rcrd.combined_comparison(combined_type)
+		   recvec=rcrd.recvar_vec.c
+		   	if (rectype==0 || proc_type==0) {	// the original record or a processing of the original is a distance record
+		   		tree_profile()
+  			} else if (rectype==1) {
+				time_trace(LOGSYN)
+			}
+		} else if (gtype==14) { // time standard deviation for time vectors
+		   rcrd.recvec_time_std()
+		   recvec=rcrd.recvar_vec.c
+		   tree_profile()
+		}
+	if (export && export_keep) { export_num+=1 }
+	}
+}
+// -----------------------------------------------------------------------------
+
+endtemplate Plotter
+
+// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+// id, recid, gtype
+proc prepare_plotter() {
+	read_constant_records()
+	 plotterlist=new List()
+	 plotter=new Plotter(0,1)
+	 plotterlist.append(plotter)
+	 plotter=new Plotter(1,2)
+	 plotterlist.append(plotter)
+	 numplotter=2
+}
+
+proc add_plotter_gui() { local i
+	 for i=0,numplotter-1 {
+	 	 plotterlist.object(i).plotter_gui()
+	 }
+}
+
+// =========================================================================================
+

@@ -1,0 +1,202 @@
+/* The SectionRef built in object is not sufficient for what is needed from a Section object in the
+   data structure. Therefore, an alternative object, Section, is defined. For some reason, Neuron
+   supports recursion only to a limited extent, therefore, a tedious procedure for scanning the
+   tree and identifying individual branches while creating Section objects that match the SectionRef
+   tree arrangement is carried out.
+*/
+
+
+/* Querry examples:
+   ===============
+   Branch
+   ------
+   The name of Section (num 2) of a selected Branch (num 33) -
+   	tree.branchlist.object(33).seclist.object(2).sec.sec
+   Parent/Child
+   ------------
+   The name of the child (num 0) of the selected Branch's (above) parent -
+   	tree.branchlist.object(33).seclist.object(2).parent.childlist.object(0).sec.sec
+*/
+
+//////////////////////////////////////////////////////////////////////////////////////////////
+//                                      Section Functions
+//                                      =================
+//////////////////////////////////////////////////////////////////////////////////////////////
+
+
+// create a list of all the root sections (who's parents are soma sections)
+proc create_root_list() {
+	NUMROOT=0
+	objref sec,rootlist
+	root_list=new List()
+	subtree=new Vector()
+	forsec dendrite_basal_section_list {		  // create list of root sections
+		   root_section_list(0)
+	}
+	forsec dendrite_apical_section_list {		  // create list of root sections
+		   root_section_list(1)
+	}
+}
+
+proc root_section_list() { local subtree_type
+	 subtree_type=$1
+	 sec=new SectionRef()  // note: sec here is a regular SectionRef
+	 if (sec.has_parent) {
+		sec.parent {
+			if (issection(MORPH.soma_name.object(0).s)) {
+		   		sec.sec root_list.append(new Root())
+		   		subtree.append(subtree_type)
+		   		NUMROOT+=1
+			}
+		}
+	 }
+}
+
+// Scan the tree looping through child sections of the roots (depth first search)
+proc create_tree() { local id,r
+	objref node,rnode,cnode,nodelist,tree
+	objref branch
+	nodelist=new List()
+	tree=new Tree()
+	for r=0,NUMROOT-1 {
+		root_list.object(r).sec.sec {
+			rnode=new Node(1) // 1=root
+			nodelist.append(rnode) // add the new Node to the seclist
+			while (rnode.status) { // as long as current root is branchable
+				// create a candidate branch, initialize first item on the seclist to be the current root
+				branch=new Branch(subtree.x(r))
+				cont=1 // continue flag
+				node=rnode
+				while (cont) { // loop the Nodes within a candidate branch
+					// leaf => accepted branch
+					// =======================
+					if (node.leaf) { // a leaf has been reached (leaves already have status set to zero)
+					   	branch.Node_to_Branch(node) // add leaf to end of branche's Node list
+						tree.add_branch(branch) // add the branch to the accepted branch list
+						// scan accepted branch and append the Section branchlists
+						cont=0
+						// decrease parent's child counter (as long as parent is not a root)
+						if (!node.root) {
+							node.parent.childcount+=1
+						} else { // special case of root being also a leaf
+							node.status=0
+						}	
+					// either on the way to a potential leaf or an unbranchable node
+					// ===============================================================
+					} else {
+						// branchable Section
+						// ==================
+						if (node.status) {
+							branch.Node_to_Branch(node) // add branchable Node to branch's Section list
+							id=node.childcount
+							if (id<node.sec.nchild) { // turn to node's next child if it still has any
+								node.sec.child(id) {
+									if (node.childstatus.x(id)) { // use existing child Node
+										cnode=node.childlist.object(id)
+									} else { // create a new child Node
+										cnode=new Node(0) // 0=non root Node
+										nodelist.append(cnode)
+										cnode.parent=node // two directional pointers
+										node.childlist.append(cnode)
+										node.childstatus.x(id)=1 // flag - id child has been created
+									}
+									node=cnode
+								}
+							} else { // if no more children are left
+								node.status=0 // switch Node off
+								if (!node.root) { node.parent.childcount+=1 }
+								cont=0 // try a new branch
+							}
+							// unbranchable Section
+							// ==================== 
+						} else { cont=0	}
+					}
+				}
+			}
+		}
+	}
+	NUMNODE=nodelist.count()
+}
+
+// For each Node create a pointer list to the branches it is included in
+proc Section_to_Branch() { local i,j,n
+	 NUMBRANCH=tree.numbranch
+	 for i=0,NUMBRANCH-1 {
+	 	 branch=tree.branchlist.object(i)
+	 	 n=branch.length
+		 for j=0,n-1 {
+		 	branch.nodelist.object(j).add_branch(branch)
+		 }
+	 }
+	 BRANCH=tree.branchlist.object(SLCT_BRANCH)
+}
+
+
+// ===================================================================================
+
+proc branch_manual_select() { local i, found, ifound
+	found = 0
+	for i = 0, tree.branchlist.count - 1 {
+		if (BRANCHmanual == tree.branchlist.object(i).id) {
+			found = 1
+			ifound = i
+			break
+		}
+	}
+	if (found) {
+		branch_select(ifound)
+	} else {
+		BRANCHmanual = BRANCH.id
+	}	
+}
+
+proc branch_select() {
+	 SLCT_BRANCH=$1
+	 BRANCH=tree.branchlist.object(SLCT_BRANCH)
+	 BRANCHmanual = BRANCH.id
+	 SLCT_LOGSYN=0
+	 LOGSYN=BRANCH.logsynlist.object(SLCT_LOGSYN)
+	 LOGSYNmanual = LOGSYN.id
+	 browser_logsynlist_update()
+	 plot_branch_logsyn()
+ 	tree.branchlist.select(SLCT_BRANCH)
+}
+
+proc logsyn_manual_select() { local i, found, ifound
+	found = 0
+	for i = 0, BRANCH.logsynlist.count - 1 {
+		if (LOGSYNmanual == BRANCH.logsynlist.object(i).id) {
+			found = 1
+			ifound = i
+			break
+		}
+	}
+	if (found) {
+		logsyn_select(ifound)
+	} else {
+		LOGSYNmanual = LOGSYN.id
+	}	
+}
+
+proc logsyn_select() { local input
+	input=$1
+	if (input>=0) {
+		SLCT_LOGSYN=$1
+		LOGSYN=BRANCH.logsynlist.object(SLCT_LOGSYN)
+		LOGSYNmanual = LOGSYN.id
+		plot_branch_logsyn()
+		sprint(SLCT_LOGSYN_name,"%d syn(s) %5.4g um",LOGSYN.numsyns,LOGSYN.dist)
+	}
+	browser_logsynlist.select(SLCT_LOGSYN)
+}
+
+proc browser_logsynlist_update() { local i
+	 browser_logsynlist.remove_all()
+	 for i=0,BRANCH.numlogsyn-1 {
+//	 	 browser_logsynlist.append(new Name(BRANCH.logsynlist.object(i).logsyn_name))
+	 	 browser_logsynlist.append(new String(BRANCH.logsynlist.object(i).logsyn_name))
+	 }
+	 browser_logsynlist.select(SLCT_LOGSYN)
+	sprint(SLCT_LOGSYN_name,"%d syn(s) %5.4g um",LOGSYN.numsyns,LOGSYN.dist)
+}
+

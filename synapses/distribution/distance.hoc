@@ -1,0 +1,111 @@
+// synapses are distributed evenly according to distance from soma
+/*
+if SYNINT is to great, many nodes will not have synapses on them and even whole
+branches will be bare of synapses which temporarily produces an error when trying to
+access such a bare branch
+*/
+// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+// each segment has a reference to the node (=section) it belongs to
+begintemplate Compartment
+
+public sec
+public loc
+public dist
+public numsyns
+public logsyn
+public node_update
+public numbranches // number of branches that share this sement's node
+objref sec,logsyn,node
+
+proc init() {
+	 loc=$1
+	 dist=$2
+	 node=$o3	// reference to this section's node in the node list
+	 numbranches=node.numbranches
+	 sec=new SectionRef()
+	 numsyns=0
+	 node_updated=0 // flag: 0=not updated yet; 1=updated
+}
+
+// each segement is updated just for its logsyn, but the same node could have more than
+// one segment
+proc node_update() {
+	logsyn=$o1
+	if (!node_updated) {
+		node.logsynlist.append(logsyn)
+		node.update_branches(logsyn) // update branch synloglist
+		node_updated=1
+	}
+}
+
+endtemplate Compartment
+
+// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+// prepare a list of Compartment (segment) instances sorted according to distance from soma
+proc prepare_data() { local distx,i,subtree
+	temp_comp_list=new List()
+	comp_list=new List()
+	dist_vec=new Vector()
+	n=0
+	for i=0,dNSEC-1 {
+		node=nodelist.object(i)
+		subtree=node.branchlist.object(0).subtree
+		node.sec.sec {
+			for (x,0) {
+				distx=distance(x)
+				if (subtree==0) { distx*=-1 } // basal subtree
+				temp_comp_list.append(new Compartment(x,distx,node))
+				dist_vec.append(distx)
+			}
+		}
+	}
+	sorted_indx=dist_vec.sortindex
+	dist_vec.sort // sorry for sorting twice, but I can't seem to do it in one go
+	for i=0,dNSEG-1 {
+		comp_list.append(temp_comp_list.object(sorted_indx.x(i)))
+	}
+	objref temp_comp_list,sorted_indx
+}
+
+proc syn_create() {
+	if (comp.numsyns>1) { // just add a synapse to an existing logsyn
+		logsynlist.object(NLOGSYNS-1).numsyns+=1 // increase synapse counter for current location i
+	} else { // create a new logsyn
+		logsyn=new Logical_Synapse(node,comp.dist,comp.loc,NLOGSYNS)
+		logsyn.syn=new ScalExp2Syn(comp.loc) // add a new synapse at location
+/*		
+		logsyn.syn.tau1=SYNTAU1
+		logsyn.syn.tau2=SYNTAU2
+		logsyn.syn.e=SYNE
+		logsyn.syn.gmax=SYNG
+*/
+		logsynlist.append(logsyn)
+		comp.node_update(logsyn)
+		NLOGSYNS+=1
+	}
+	NSYNS+=1
+}
+
+proc synlocate() { local i,sl,delta,next_delta
+	NSYNS=0
+	NLOGSYNS=0
+	prepare_data()
+	sl=dist_vec.x(0)+SYNINT // distance to next synaptic location (beginning from from farthest basal segment)
+	logsynlist=new List()
+	browser_logsynlist=new List()
+	for i=0,dNSEG-2 { // scan segments
+		comp=comp_list.object(i)
+		next_comp=comp_list.object(i+1)
+		comp.sec.sec {
+			while (1) { // scan synaptic locations
+				delta=abs(comp.dist-sl)
+				next_delta=abs(next_comp.dist-sl)
+				if (next_delta<delta) {	break } // advance one segment
+				comp.numsyns+=1
+				syn_create()
+				sl+=SYNINT
+			}
+		}
+	}
+	LOGSYN=BRANCH.logsynlist.object(SLCT_LOGSYN)
+}

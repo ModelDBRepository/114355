@@ -1,0 +1,11 @@
+// no axon
+
+proc create_axon() {
+	print "no axon"
+}
+
+proc axon_attach() {
+}
+
+proc axon_detach() {
+}

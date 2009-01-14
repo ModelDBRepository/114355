@@ -1,0 +1,5 @@
+Version 8 has a stochastic HSP rule affecting Gsyn,i for excitatory and inhibitory synapses
+and Gion for various ion channels
+In addition, files are grouped under the specific general configuration
+(e.g. "cable cable 10 5 25 20") with subdirectories for configuration, RIP, RDP, subgroups,
+etc. Deletion removes all files (including subgroup files).

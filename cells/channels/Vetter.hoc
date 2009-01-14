@@ -1,0 +1,120 @@
+//   Vetter et al. (2001)
+// ===============================================================================
+
+// parameters
+// ----------
+
+v_init    = -70
+celsius   = 37
+
+ra        = 150
+rm        = 12000
+c_m       = 1
+
+Ek = -90
+Ena = 60
+
+// ===============================================================================
+
+// variable defaults
+// -----------------
+
+SGNa = 35
+SVshftNa = -5
+SGKv = 30
+
+DSpine = 2 // spine correction factor
+DGNa = SGNa
+DVshftNa = SVshftNa
+DGKv = SGKv
+DGKAp = 480 // devide by 10,000 to transform to Migliore mS/cm2
+DKAslope = 0
+
+AxGNa = 30000
+AxVshftNa = SVshftNa
+AxhtauNa = 1 // factor multiplying htau (slower inactivation)
+AxGKv = 2000 // only at hillock and iseg (otherwise non-existing)
+AxGKAp = 480 // devide by 10,000 to transform to Migliore mS/cm2
+// ===============================================================================
+// user access flag; conductance parameter flag; [gui name]; [variable name];
+// ([] - if user access flag==1)
+// variable value; range distribution formula
+
+subtree = new Subtree("Soma",soma_section_list)
+	channel = new Channel("pas")
+		channel.add_parameter(new Channel_Parameter(0,0,"e_pas",v_init,"e_pas=v_init"))
+		channel.add_parameter(new Channel_Parameter(0,1,"g_pas",1/rm,"g_pas=1/rm"))
+		channel.add_parameter(new Channel_Parameter(0,0,"Ra",ra,"Ra=ra"))
+		channel.add_parameter(new Channel_Parameter(0,0,"cm",c_m,"cm=c_m"))
+	subtree.add_channel(channel)
+	channel = new Channel("na_MS")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_na_MS","g Na+ (fast)","SGNa",SGNa,"gbar_na_MS = SGNa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",Ena,"ena=Ena"))
+		channel.add_parameter(new Channel_Parameter(1,0,"vshift_na_MS","Na+ threshold","SVshftNa",SVshftNa,"vshift_na_MS=SVshftNa"))
+	subtree.add_channel(channel)
+	channel = new Channel("kv_MS")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_kv_MS","g K+ (dr)","SGKv",SGKv,"gbar_kv_MS=SGKv"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",Ek,"ek=Ek"))
+	subtree.add_channel(channel)
+LAYOUT.add_subtree(subtree)
+
+// non uniform density
+// -------------------
+proc dend_x() { local y0,slope
+	y0=$1
+	slope=$2
+	for (x,0){
+ 		sprint(cmd,"%s(x)=%g+%g*distance(x)",param.param_name,y0,slope)
+		execute(cmd)
+	}
+}
+
+subtree = new Subtree("Dendrite",dendrite_section_list)
+	channel = new Channel("pas")
+		channel.add_parameter(new Channel_Parameter(1,2,"","Spine Correction","DSpine",DSpine,""))
+		channel.add_parameter(new Channel_Parameter(0,0,"e_pas",v_init,"e_pas=v_init"))
+		channel.add_parameter(new Channel_Parameter(0,1,"g_pas",rm,""))
+		channel.add_parameter(new Channel_Parameter(1,2,"","Rm","rm",rm,"g_pas=1/(rm/DSpine)"))
+		channel.add_parameter(new Channel_Parameter(1,2,"Ra","Ra","ra",ra,"Ra=ra"))
+		channel.add_parameter(new Channel_Parameter(1,2,"cm","cm","c_m",c_m,"cm=c_m*DSpine"))
+	subtree.add_channel(channel)
+	channel = new Channel("na_MS")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_na_MS","g Na+ (fast)","DGNa",DGNa,"gbar_na_MS = DGNa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",Ena,"ena=Ena"))
+		channel.add_parameter(new Channel_Parameter(1,0,"vshift_na_MS","Na+ threshold","DVshftNa",DVshftNa,"vshift_na_MS=DVshftNa"))
+	subtree.add_channel(channel)
+	channel = new Channel("kv_MS")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_kv_MS","g K+ (dr)","DGKv",DGKv,"gbar_kv_MS=DGKv"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",Ek,"ek=Ek"))
+	subtree.add_channel(channel)
+	channel = new Channel("kap_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkabar_kap_M","g K+ (Ap) initial","DGKAp",DGKAp,"dend_x(DGKAp/10000,DKAslope/10000)"))
+		channel.add_parameter(new Channel_Parameter(1,0,"","KA slope","DKAslope",DKAslope,""))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",Ek,"ek=Ek"))
+	subtree.add_channel(channel)
+LAYOUT.add_subtree(subtree)
+
+subtree = new Subtree("Axon",axon_section_list)
+	channel = new Channel("pas")
+		channel.add_parameter(new Channel_Parameter(0,0,"e_pas",v_init,"e_pas=v_init"))
+		channel.add_parameter(new Channel_Parameter(0,1,"g_pas",1/rm,"g_pas=1/rm"))
+		channel.add_parameter(new Channel_Parameter(0,0,"Ra",ra,"Ra=ra"))
+		channel.add_parameter(new Channel_Parameter(0,0,"cm",c_m,"cm=c_m"))
+	subtree.add_channel(channel)
+	channel = new Channel("na_MS")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_na_MS","g Na+ (fast)","AxGNa",AxGNa,"gbar_na_MS = AxGNa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",Ena,"ena=Ena"))
+		channel.add_parameter(new Channel_Parameter(1,0,"vshift_na_MS","Na+ threshold","AxVshftNa",AxVshftNa,"vshift_na_MS=AxVshftNa"))
+		channel.add_parameter(new Channel_Parameter(1,0,"htau_factor_na_MS","Na+ htau x","AxhtauNa",AxhtauNa,"htau_factor_na_MS=AxhtauNa"))
+	subtree.add_channel(channel)
+	channel = new Channel("kv_MS")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_kv_MS","g K+ (dr)","AxGKv",AxGKv,"gbar_kv_MS=AxGKv"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",Ek,"ek=Ek"))
+	subtree.add_channel(channel)
+	channel = new Channel("kap_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkabar_kap_M","g K+ (Ap)","AxGKAp",AxGKAp,"gkabar_kap_M=AxGKAp/10000"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",Ek,"ek=Ek"))
+	subtree.add_channel(channel)
+LAYOUT.add_subtree(subtree)
+// --------------------------------------------------------------------------------------
+

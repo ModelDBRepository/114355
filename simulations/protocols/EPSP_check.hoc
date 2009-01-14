@@ -1,0 +1,75 @@
+// create single EPSP at each synapse and record the current measured at the soma with voltage clamp
+
+proc EPSP_check_parameters() {
+	tstop=50
+	sprint(str_tstop,"tstop = %d ms",tstop)
+	NUM=1
+	STRT=5    	 // input start time
+	NOISE=0   	 // noise level
+	INTRVL=10*tstop	 // inter-spike average interval (big number)
+	WEIGHT = 0.001 // by default synapse has a 1 nS conductance
+}
+
+proc EPSP_check_stim() {
+	objref source,trvl_syn
+	source=new NetStim(0.5)
+	source.number=NUM
+	source.start=STRT
+	source.interval=INTRVL
+	source.noise=NOISE
+	LOGSYN.sec.sec trvl_syn=new Exp2Syn(LOGSYN.loc)
+	trvl_syn.tau1=SYNTAU1
+	trvl_syn.tau2=SYNTAU2
+	trvl_syn.e=SYNE
+	syn=new NetCon(source,trvl_syn,0.9,0, WEIGHT)	
+}
+
+proc EPSP_check_recvec() { local loc
+	sEPSPrec=new Vector()
+	sprint(cmd, "sEPSPrec.record(&%s.v(0.5))", ORIGIN_NAME)
+	execute(cmd)
+	EPSPrec=new Vector()
+	loc = LOGSYN.loc
+	EPSPrec.record(&LOGSYN.sec.sec.v(loc))
+}
+
+proc EPSP_check_undo(){
+	objref syn
+	objref source
+	objref trvl_syn
+	objref sEPSPrec
+	objref EPSPrec
+}
+
+proc EPSP_check_plot() { local loc
+	strdef sma
+	strdef lbl
+	graphItem.size(0,tstop,-65,-50)
+	sprint(sma,"%s.v(0.5)",ORIGIN_NAME)
+	graphItem.addexpr(sma,1,1)
+	LOGSYN.sec.sec sprint(sma, "%s.v(%g)", secname(), LOGSYN.loc)
+	graphItem.addexpr(sma,2,1)
+	sprint(lbl,"EPSP (mV) %3.2f um with gmax=%2.2f",LOGSYN.dist,LOGSYN.syn.Egmax)
+	graphItem.align(0.5, 1)
+	graphItem.label(0.5,1, lbl)
+	graphItem.align(0,0)
+	graphItem.label(0.5,0,"time (ms)")
+}
+
+proc EPSP_check_begin_simulation() { local i, enable, variant, weight, gsyn
+	enable = SCALE_ENABLE
+	SCALE_ENABLE = 0
+	set_SCALE_ENABLE(1,1)
+	reclist.object(1).read_record()
+	EPSP_check_stim()
+ 	EPSP_check_plot()
+	EPSP_check_recvec()
+	syn.weight = LOGSYN.syn.Egmax*WEIGHT
+	sprint(str_status,"EPSP check LOGSYN %d SF = %g nS",LOGSYN.id, LOGSYN.syn.Egmax)
+ 	my_run()
+	SCALE_ENABLE = enable
+	set_SCALE_ENABLE(1,1)
+	sprint(str_status, "Syn max = %g Soma max = %g", EPSPrec.max, sEPSPrec.max)
+}
+
+

@@ -1,0 +1,11 @@
+// Analysis DEFAULT Parameters
+// ===========================
+AMPap=0.4
+DURap=5
+STEPap=0.0001
+NUMBERap=40
+SPIKE_THRESHOLD=0
+SPIKEstart=0
+WINDOW=500
+CUTOFF=500
+NBINS=100

@@ -1,0 +1,147 @@
+/* Procedures to set synaptic sources for various environment conditions */
+
+proc vivo_parameters() {
+	tstop=TSTOP
+	sprint(str_tstop,"tstop = %d ms",tstop)
+	SEED1=5978367    // random seed
+	SEEDL=1534370    // random seed
+	SEEDH=5493257
+	seeder = new Random()
+	seeder.uniform(SEEDL,SEEDH)
+	rnd = new Randomizer(0.5)
+	rnd.seed(seeder.repick())
+}
+
+proc vivo_stim() { local i,j,time,intrvl,neproc,nlogsyns,nsyns
+	objref ncrec[NLOGSYNS],nil
+	proc_num = 0
+	nlogsyns = NLOGSYNS
+	nsyns = NSYNS
+	if (NSUBGS) {
+		for i = 0, subg_list.count - 1 {
+			subg = subg_list.object(i)
+			subg.prepare_nc_array(subg.nlogsyns)
+			nlogsyns -= subg.nlogsyns
+			nsyns -= subg.nsyns
+			neproc = int(subg.nsyns + sqrt(subg.Ecorr) * (1 - subg.nsyns))
+			subg.rnd = new Randomizer(0.5)
+//if (subg.id == 1) { subg.rnd.special = 1 }
+			subg.rnd.seed(seeder.repick())
+			subg.rnd.NEproc = neproc
+			subg.rnd.Eintrvl = 1000 / subg.Efreq
+			setpointer subg.rnd.proc_num, subg.proc_num
+			for j = 0, subg.nlogsyns - 1 {
+				logsyn = subg.logsynlist.object(j)
+				logsyn.syn.Eintrvl = 1000 / subg.Efreq
+//logsyn.syn.special = 1 // temporary skip every 3rd epsp of 3 Hz synapse
+				logsyn.syn.NEproc = neproc
+				setpointer logsyn.syn.proc_num, subg.proc_num
+				subg.ncstim[j] = new NetCon(subg.rnd,logsyn.syn,0,0,0)
+			}
+		}
+	}
+	objref ncstim[nlogsyns]
+	neproc = int(nsyns + sqrt(ECORR) * (1 - nsyns)) // number of excitatory poisson processes
+	rnd.NEproc = neproc // how many Poisson processes should the randomizer generate
+	rnd.Eintrvl = 1000 / EFREQ_VIVO
+	setpointer rnd.proc_num, proc_num
+	k=0
+	for i=0,NLOGSYNS-1 {
+		logsyn=logsynlist.object(i)
+		if (!logsyn.subgroup_id) {
+			logsyn.syn.Eintrvl = 1000 / EFREQ_VIVO
+//			logsyn.syn.Iintrvl = 1000 / IFREQ_VIVO
+			logsyn.syn.NEproc = neproc // number of processes the synapse has to choose from at each time step
+			setpointer logsyn.syn.proc_num, proc_num
+			ncstim[k] = new NetCon(rnd,logsyn.syn,0,0,0)
+			k += 1
+		}
+		ncrec[i] = new NetCon(logsyn.syn,nil)
+		logsyn.input=new Vector() // since it is a constant record it will be inflated if run twice
+		ncrec[i].record(logsyn.input)
+	}
+	ncrec[0].record(logsynlist.object(0).input) // for some reason, without this line, it does not record for logsyn.id=0
+}
+
+proc vivo_recvec() { local i,loc
+	 // ---------------------------------------
+	 // soma voltage
+	 vivo0RECdt=0.1
+	 vivo0RECstart=0
+	 vivo0_time=new Vector()
+	 vivo0_time.indgen(vivo0RECstart,tstop+vivo0RECdt,vivo0RECdt)
+	 v0rec=new Vector(vivo0_time.size) // voltage at soma
+	 sprint(cmd,"v0rec.record(&%s.v(0.5),vivo0_time)",ORIGIN_NAME)
+	 execute(cmd)
+	 // ---------------------------------------
+	 // voltage (high resolution but only for a short final time segment)
+	 vivoRECpoints=VRECpoints //2000
+	 vivoRECdt=VRECdt //0.5
+	 vivoRECstart=tstop-vivoRECpoints*vivoRECdt
+	 if (vivoRECstart<0) { vivoRECstart=0 }
+	 vivo_time=new Vector() // voltage at synapse
+	 vivo_time.indgen(vivoRECstart,tstop+vivoRECdt,vivoRECdt)
+	 // ---------------------------------------
+	 // SF (sample sf every so often)
+	 vivoGMAXRECstart=RECstart // in case the user changes the parameter during the run
+	 vivoGMAXRECdt=RECdt // in case the user changes the parameter during the run
+	 vivo_gmax_time=new Vector() // sf at synapse
+	 vivo_gmax_time.indgen(vivoGMAXRECstart,tstop+vivoGMAXRECdt,vivoGMAXRECdt)
+	 mavg_time=new Vector() // moving average
+	 mavg_time.indgen(MAVGstart,tstop+MAVGintrvl,MAVGintrvl)
+	 for i=0,NLOGSYNS-1 {
+	 	 logsyn=logsynlist.object(i)
+		 loc=logsyn.loc
+		 logsyn.vrec=new Vector(vivo_time.size)
+		 logsyn.vrec.record(&logsyn.sec.sec.v(loc),vivo_time)
+		if (SCALE_ENABLE) {
+			 logsyn.Egmaxrec=new Vector(vivo_gmax_time.size)
+			 logsyn.Egmaxrec.record(&logsyn.syn.Egmax,vivo_gmax_time)
+		}
+//		 logsyn.Isfrec=new Vector(vivo_sf_time.size)
+//		 logsyn.Isfrec.record(&logsyn.syn.Isf,vivo_sf_time)
+		 // moving average (the average voltage during the last RECdt interval)
+		 logsyn.mavgrec=new Vector(mavg_time.size)
+		 logsyn.mavgrec.record(&logsyn.syn.mavg,mavg_time)
+	 }
+}
+
+// detach all stimuli and clear all record vectors to allow a different protocol to run
+proc vivo_undo() {
+	 objref rand0,rand,intrvl_rand
+	 objref v0rec
+	 objref recspikes   // spike time record
+	 objref apc	// AP counter object 
+	 objref vivo0_time   //
+	 objref vivo_time   //
+	 objref vivo_gmax_time   //
+	 objref ncrec,ncstim
+}
+
+proc vivo_plot() {
+	strdef sma
+	sprint(sma,"%s.v(0.5)",ORIGIN_NAME)
+	graphItem.size(0,tstop,-80,40)
+	loc=LOGSYN.loc
+	graphItem.addexpr(sma,1,1)
+	graphItem.addexpr("LOGSYN.sec.sec.v(loc)",2,1)
+	sprint(lbl,"Voltage at soma and at %3.2f microns from soma",LOGSYN.dist)
+	graphItem.align(0.5, 1)
+	graphItem.label(0.5,1,lbl)
+}
+
+proc vivo_begin_simulation() { local i
+	 reset_records()
+	 vivo_stim()
+	 vivo_recvec()
+	 sprint(str_status,"Running Artificial Vivo (tstop = %d)", tstop)
+	 my_run()
+	if (SCALE_ENABLE) {
+		write_dendrite_run_dependent_records(logsyn.vrec.size(),vivoRECdt,vivoRECstart,logsyn.Egmaxrec.size(),vivoGMAXRECdt,vivoGMAXRECstart,logsyn.mavgrec.size(),MAVGintrvl,MAVGstart)
+	} else {
+		write_dendrite_run_dependent_records(logsyn.vrec.size(),vivoRECdt,vivoRECstart,0,0,0,logsyn.mavgrec.size(),MAVGintrvl,MAVGstart)
+	}
+	 write_soma_run_dependent_records(v0rec.size(),vivo0RECdt,vivo0RECstart,v0rec)
+	 reset_records()
+	 str_status="Ready"
+}

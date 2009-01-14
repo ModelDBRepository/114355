@@ -1,0 +1,48 @@
+// Simple channel layout for cable
+// ===============================================================================
+
+// parameters
+// ----------
+
+v_init = -65
+celsius = 34.0
+
+Rm = 28000
+Cm    = 1
+Ra = 150
+
+EK = -90
+ENa = 55
+
+// ===============================================================================
+
+// variable defaults
+// -----------------
+
+GNa = 0
+GKdr = 0
+
+// ===============================================================================
+// user access flag; conductance parameter flag; [gui name]; [variable name];
+// ([] - if user access flag==1)
+// variable value; range distribution formula
+
+subtree = new Subtree("Soma",soma_section_list)
+	channel = new Channel("pas")
+		channel.add_parameter(new Channel_Parameter(0,0,"e_pas",v_init,"e_pas=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(0,1,"g_pas",1/Rm,"g_pas=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(1,2,"","Ra","Ra",Ra,"Ra=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(0,0,"cm",Cm,"cm=param.var_value"))
+	subtree.add_channel(channel)
+LAYOUT.add_subtree(subtree)
+
+subtree = new Subtree("Dendrite",dendrite_section_list)
+	channel = new Channel("pas")
+		channel.add_parameter(new Channel_Parameter(0,0,"e_pas",v_init,"e_pas=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(0,1,"g_pas",1/Rm,"g_pas=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(1,2,"","Ra","Ra",Ra,"Ra=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(0,0,"cm",Cm,"cm=param.var_value"))
+	subtree.add_channel(channel)
+LAYOUT.add_subtree(subtree)
+
+// --------------------------------------------------------------------------------------

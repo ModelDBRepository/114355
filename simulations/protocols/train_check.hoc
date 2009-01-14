@@ -1,0 +1,69 @@
+// create single EPSP at each synapse and record the voltage measured at that synapse and
+// at the soma
+
+proc train_check_parameters() {
+	 tstop=1000
+	 sprint(str_tstop,"tstop = %d ms",tstop)
+	STRT=5
+	copyDURap=DURap
+	DURap=tstop
+}
+
+proc train_check_stim() {
+	 sprint(cmd,"%s imp = new IClamp(0.5)",ORIGIN_NAME)
+	 execute(cmd)
+	 imp.dur = DURap
+	 imp.amp = AMPap
+	 imp.del = STRT
+}
+
+proc train_check_recvec() { local loc
+	 BPAP_time=new Vector()
+	 BPAP_time.indgen(STRT,tstop,dt) // record only from start of EPSP
+	 loc=LOGSYN.loc
+	 check_BPAPrec=new Vector()
+	 check_BPAPrec.record(&LOGSYN.sec.sec.v(loc),BPAP_time)
+	 check_sBPAPrec=new Vector()
+	 sprint(cmd,"check_sBPAPrec.record(&%s.v(0.5),BPAP_time)",ORIGIN_NAME)
+	 execute(cmd)
+}
+	
+proc train_check_undo(){
+	 DURap=copyDURap
+	 objref BPAP_time 
+	 objref check_BPAPrec
+	 objref check_sBPAPrec
+	objref imp
+}
+
+proc train_check_plot() {
+	strdef sma
+	sprint(sma,"%s.v(0.5)",ORIGIN_NAME)
+	graphItem.size(0,tstop,-80,40)
+	loc=LOGSYN.loc
+	graphItem.addexpr(sma,1,1)
+//	graphItem.addexpr("LOGSYN.sec.sec.v(loc)",2,1)
+	graphItem.addexpr("axon.ik(0.5)*10+v_init",4,2)
+	graphItem.addexpr("imp.i*10+v_init",3,1)
+	sprint(lbl,"Train of BPAPs (mV) %3.2f microns from soma",LOGSYN.dist)
+	graphItem.align(0.5, 1)	
+	graphItem.label(0.5,1,lbl)
+	graphItem.align(0,0)	
+	graphItem.label(0.5,0,"time (ms)")
+}
+
+proc train_check_begin_simulation() { local eta
+	eta=SFSpms
+	SFSpms=0
+	set_SFS(1)
+	 train_check_stim()
+	 train_check_recvec()
+	train_check_plot()
+ 	str_status="Running train check"
+ 	 run()
+	SFSpms=eta
+	set_SFS(1)
+	str_status="Ready"
+}
+
+ 

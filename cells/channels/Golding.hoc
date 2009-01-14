@@ -1,0 +1,230 @@
+// Channel layout from Golding et al. (2001)
+// Migliore et al. (1999) channels
+// spine correction
+// ===============================================================================
+
+// parameters
+// ----------
+
+v_init = -65
+celsius = 34.0
+
+Rm = 40000
+RmDend = Rm
+RmSoma = Rm
+RmAx = Rm
+RmAxMy = 50
+
+Cm    = 0.75
+CmSoma= Cm
+CmAx  = Cm
+CmAxMy = 0.075
+CmDend = Cm
+
+RaSoma = 200
+RaDend= 200
+RaAx = RaDend //50
+
+EK = -90
+ENa = 55
+
+// ===============================================================================
+
+// variable defaults
+// -----------------
+
+SGNa = 0.045
+SGKdr = 0.040
+SGKAp = 0.1
+
+AxGNa = SGNa
+AxInitGNa = SGNa*100 // initial segment
+AxInitHot = 0.8 // point (x) at which hot spot begins
+AxNdGNa = 50 // nodes
+AxGKdr = SGKdr
+AxGKAp = SGKAp
+AxNdGKAp = SGKAp*0.2
+
+DaGNax1 = 300 // ramp distance (where ramp ends)
+DaGNay0 = 45/10000
+DaGNay1 = 45/10000
+DaGKdr = 40/10000
+DaGKApx1 = 300
+DaGKApy0 = 100/10000
+DaGKApy1 = 400/10000
+DaSpine = 2 // spine correction
+DaSpineDist = 0 // minimal distance for spine correction
+
+DbGNa = DaGNay0
+DbGKdr = DaGKdr
+DbGKAp = DaGKApy0
+DbSpine = DaSpine
+DbSpineDist = DaSpineDist
+
+// ===============================================================================
+// user access flag; conductance parameter flag; [gui name]; [variable name];
+// ([] - if user access flag==1)
+// variable value; range distribution formula
+
+subtree = new Subtree("Soma",soma_section_list)
+	channel = new Channel("pas")
+		channel.add_parameter(new Channel_Parameter(0,0,"e_pas",v_init,"e_pas=v_init"))
+		channel.add_parameter(new Channel_Parameter(0,1,"g_pas",RmSoma,""))
+		channel.add_parameter(new Channel_Parameter(1,2,"","Rm","RmSoma",RmSoma,"g_pas=1/RmSoma"))
+		channel.add_parameter(new Channel_Parameter(1,2,"Ra","Ra","RaSoma",RaSoma,"Ra=RaSoma"))
+		channel.add_parameter(new Channel_Parameter(1,2,"cm","cm","CmSoma",CmSoma,"cm=CmSoma"))
+	subtree.add_channel(channel)
+	channel = new Channel("na_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_na_M","g Na+ (fast)","SGNa",SGNa,"gbar_na_M=SGNa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",ENa,"ena=ENa"))
+	subtree.add_channel(channel)
+	channel = new Channel("kdr_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkdrbar_kdr_M","g K+ (dr)","SGKdr",SGKdr,"gkdrbar_kdr_M=SGKdr"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)
+	channel = new Channel("kap_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkabar_kap_M","g K+ (Ap)","SGKAp",SGKAp,"gkabar_kap_M=SGKAp"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)
+LAYOUT.add_subtree(subtree)
+
+// non uniform density
+// -------------------
+proc apical_x() { local x1,y0,y1,m,xdist
+	x1=$1 // ramp distance - where does it end
+	y0=$2 // level at beginning of ramp
+	y1=$3 // level at end of ramp
+	if (x1>0) { m=(y1-y0)/x1 // ramp slope
+	} else { m=0 }
+	for (x,0) {
+		xdist=distance(x)
+		if (xdist>x1) {
+			sprint(cmd,"%s(x)=%g",param.param_name,y1)
+			execute(cmd)
+		} else {
+			sprint(cmd,"%s(x)=%g",param.param_name,y0+m*xdist)
+			execute(cmd)
+		}
+	}
+}
+
+subtree = new Subtree("Apical Dendrite",dendrite_apical_section_list)
+	channel = new Channel("pas")
+		channel.add_parameter(new Channel_Parameter(1,2,"","Spine Correction","DaSpine",DaSpine,""))
+		channel.add_parameter(new Channel_Parameter(1,2,"","Spine min distance","DaSpineDist",DaSpineDist,""))
+		channel.add_parameter(new Channel_Parameter(0,0,"e_pas",v_init,"e_pas=v_init"))
+		channel.add_parameter(new Channel_Parameter(0,1,"g_pas",RmDend,""))
+		channel.add_parameter(new Channel_Parameter(1,2,"","Rm","RmDend",RmDend,"for (x) { if (distance(x)>DaSpineDist) { g_pas(x)=1/(RmDend/DaSpine) } else { g_pas(x)=1/RmDend }}"))
+		channel.add_parameter(new Channel_Parameter(1,2,"Ra","Ra","RaDend",RaDend,"Ra=RaDend"))
+		channel.add_parameter(new Channel_Parameter(1,2,"cm","cm","CmDend",CmDend,"for (x) { if (distance(x)>DaSpineDist) { cm(x)=CmDend*DaSpine } else { cm(x)=CmDend }}"))
+	subtree.add_channel(channel)
+	channel = new Channel("na_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_na_M","g(ramp) Na+ (fast)","DaGNay1",DaGNay1,"apical_x(DaGNax1,DaGNay0,DaGNay1)"))
+		channel.add_parameter(new Channel_Parameter(1,0,"","g(0) Na+ (fast)","DaGNay0",DaGNay0,""))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",ENa,"ena=ENa"))
+	subtree.add_channel(channel)
+	channel = new Channel("kdr_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkdrbar_kdr_M","g K+ (dr)","DaGKdr",DaGKdr,"gkdrbar_kdr_M=DaGKdr"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)
+	channel = new Channel("kap_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkabar_kap_M","g(ramp) K+ (Ap)","DaGKApy1",DaGKApy1,"apical_x(DaGKApx1,DaGKApy0,DaGKApy1)"))
+		channel.add_parameter(new Channel_Parameter(1,0,"","g(0) K+ (Ap)","DaGKApy0",DaGKApy0,""))
+		channel.add_parameter(new Channel_Parameter(1,0,"","x(ramp) K+ (Ap)","DaGKApx1",DaGKApx1,""))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)
+LAYOUT.add_subtree(subtree)
+
+subtree = new Subtree("Basal Dendrite",dendrite_basal_section_list)
+	channel = new Channel("pas")
+		channel.add_parameter(new Channel_Parameter(1,2,"","Spine Correction","DbSpine",DbSpine,""))
+		channel.add_parameter(new Channel_Parameter(1,2,"","Spine min distance","DbSpineDist",DbSpineDist,""))
+		channel.add_parameter(new Channel_Parameter(0,0,"e_pas",v_init,"e_pas=v_init"))
+		channel.add_parameter(new Channel_Parameter(0,1,"g_pas",RmDend,"for (x) { if (distance(x)>DbSpineDist) { g_pas(x)=1/(RmDend/DbSpine) } else { g_pas(x)=1/RmDend }}"))
+		channel.add_parameter(new Channel_Parameter(0,0,"Ra",RaDend,"Ra=RaDend"))
+		channel.add_parameter(new Channel_Parameter(0,0,"cm",CmDend,"for (x) { if (distance(x)>DbSpineDist) { cm(x)=CmDend*DbSpine } else { cm(x)=CmDend }}"))
+	subtree.add_channel(channel)
+	channel = new Channel("na_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_na_M","g Na+","DbGNa",DbGNa,"gbar_na_M=DbGNa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",ENa,"ena=ENa"))
+	subtree.add_channel(channel)
+	channel = new Channel("kdr_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkdrbar_kdr_M","g K+ (dr)","DbGKdr",DbGKdr,"gkdrbar_kdr_M=DbGKdr"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)
+	channel = new Channel("kap_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkabar_kap_M","g K+ (Ap)","DbGKAp",DbGKAp,"gkabar_kap_M=DbGKAp"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)
+LAYOUT.add_subtree(subtree)
+
+subtree = new Subtree("Axon Hillock and Initial Segment",axon_hill_iseg_section_list)
+	channel = new Channel("pas")
+		channel.add_parameter(new Channel_Parameter(0,0,"e_pas",v_init,"e_pas=v_init"))
+		channel.add_parameter(new Channel_Parameter(0,1,"g_pas",1/RmAx,"g_pas=1/RmAx"))
+		channel.add_parameter(new Channel_Parameter(1,2,"Ra","Ra","RaAx",RaAx,"Ra=RaAx"))
+		channel.add_parameter(new Channel_Parameter(1,2,"cm","cm","CmAx",CmAx,"cm=CmAx"))
+	subtree.add_channel(channel)
+	channel = new Channel("na_M")
+		strng=".*iseg.*"
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_na_M","g Na+ (last 20%)","AxInitGNa",AxInitGNa,"for (x,0) { if (issection(strng) && x>=AxInitHot) { gbar_na_M(x) = AxInitGNa } else { gbar_na_M(x)=AxGNa }}"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",ENa,"ena=ENa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"",AxInitHot,""))
+//		channel.add_parameter(new Channel_Parameter(1,0,"","Hot Spot","AxInitHot",AxInitHot,""))
+	subtree.add_channel(channel)
+	channel = new Channel("kdr_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkdrbar_kdr_M","g K+ (dr)","AxGKdr",AxGKdr,"gkdrbar_kdr_M=AxGKdr"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)
+	channel = new Channel("kap_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkabar_kap_M","g K+ (Ap)","AxGKAp",AxGKAp,"gkabar_kap_M=AxGKAp"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)
+LAYOUT.add_subtree(subtree)
+
+subtree = new Subtree("Axon Myelin",axon_myelin_section_list)
+	channel = new Channel("pas")
+		channel.add_parameter(new Channel_Parameter(0,0,"e_pas",v_init,"e_pas=v_init"))
+		channel.add_parameter(new Channel_Parameter(0,1,"g_pas",1/RmAxMy,"g_pas=1/RmAxMy"))
+		channel.add_parameter(new Channel_Parameter(0,0,"Ra",RaAx,"Ra=RaAx"))
+		channel.add_parameter(new Channel_Parameter(0,0,"cm",CmAxMy,"cm = CmAxMy"))
+	subtree.add_channel(channel)
+	channel = new Channel("na_M")
+		channel.add_parameter(new Channel_Parameter(0,1,"gbar_na_M",AxGNa,"gbar_na_M = AxGNa"))
+//		channel.add_parameter(new Channel_Parameter(1,1,"gbar_na_M","g Na+ (fast)","AxGNa",AxGNa,"gbar_na_M = AxGNa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",ENa,"ena=ENa"))
+	subtree.add_channel(channel)
+	channel = new Channel("kdr_M")
+		channel.add_parameter(new Channel_Parameter(0,1,"gkdrbar_kdr_M",AxGKdr,"gkdrbar_kdr_M=AxGKdr"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)
+	channel = new Channel("kap_M")
+		channel.add_parameter(new Channel_Parameter(0,1,"gkabar_kap_M",AxGKAp,"gkabar_kap_M=AxGKAp"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)
+LAYOUT.add_subtree(subtree)
+
+subtree = new Subtree("Axon Nodes of Ranvier",axon_node_section_list)
+	channel = new Channel("pas")
+		channel.add_parameter(new Channel_Parameter(0,0,"e_pas",v_init,"e_pas=v_init"))
+		channel.add_parameter(new Channel_Parameter(0,1,"g_pas",1/RmAx,"g_pas = 1/RmAx"))
+		channel.add_parameter(new Channel_Parameter(0,0,"Ra",RaAx,"Ra=RaAx"))
+		channel.add_parameter(new Channel_Parameter(0,0,"cm",CmAx,"cm=CmAx"))
+	subtree.add_channel(channel)
+	channel = new Channel("na_M")
+		channel.add_parameter(new Channel_Parameter(0,1,"gbar_na_M",AxNdGNa,"gbar_na_M = AxNdGNa"))
+//		channel.add_parameter(new Channel_Parameter(1,1,"gbar_na_M","g Na+ (fast)","AxNdGNa",AxNdGNa,"gbar_na_M = AxNdGNa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",ENa,"ena=ENa"))
+	subtree.add_channel(channel)
+	channel = new Channel("kdr_M")
+		channel.add_parameter(new Channel_Parameter(0,1,"gkdrbar_kdr_M",AxGKdr,"gkdrbar_kdr_M=AxGKdr"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)
+	channel = new Channel("kap_M")
+		channel.add_parameter(new Channel_Parameter(0,1,"gkabar_kap_M",AxNdGKAp,"gkabar_kap_M=AxNdGKAp"))
+//		channel.add_parameter(new Channel_Parameter(0,1,"gkabar_kap_M","g K+ (Ap)","AxNdGKAp",AxNdGKAp,"gkabar_kap_M=AxNdGKAp"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)
+LAYOUT.add_subtree(subtree)
+
+// --------------------------------------------------------------------------------------

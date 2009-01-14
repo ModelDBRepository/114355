@@ -1,0 +1,101 @@
+
+func vectorize() { local id,dist
+	 id=$1
+	 x1=new Vector()
+	 x1.append(x3d(id-1))
+	 x1.append(y3d(id-1))
+	 x1.append(z3d(id-1))
+	 x2=new Vector()
+	 x2.append(x3d(id))
+	 x2.append(y3d(id))
+	 x2.append(z3d(id))
+	 x12=x2.c
+	 x12.sub(x1)
+	 xtmp=x12.c
+	 xtmp.mul(xtmp)
+	 dist=sqrt(xtmp.sum())
+	 x12.div(dist)
+	 return dist
+}
+proc mark_coordinate() { local measure,a
+	 measure=$1
+	 xtmp=x12.c
+	 xtmp.mul(measure)
+	 xtmp.add(x1)
+	 x=$2
+	 x_co(x)=xtmp.x(0)
+	 y_co(x)=xtmp.x(1)
+	 z_co(x)=xtmp.x(2)
+	 pt0_co(x)=$3
+}
+// calculate the 3d coordinate for each center of segment
+proc segment_coordinates() { local i,j,seglen,acc_seglen,dist,rem,traveled
+	 forsec dendrite_section_list {
+if (n3d()) {
+	 	insert co // mechanism just to keep the coordinate of each segment midpoint
+	 	seglen=L/nseg
+		seglen/=2 // first step should be half seglen so that segment middle points are calculated 
+		j=1
+		dist=vectorize(j) // distance between 3d points
+		rem=0 // remainder of previous dist not taken yet by a segment
+		acc_seglen=0 // accumulated segment length for current dist
+		traveled=0 // length traveled along current section
+		for i=1,nseg {
+			while (seglen-rem>dist-acc_seglen) { // loop dists till a segment is completed
+			   // remainder of distances not yet enought to complete a segment
+			   rem+=dist
+			   if (acc_seglen>0 && dist>acc_seglen) { rem-=acc_seglen }
+			   j+=1 // enter a new dist
+			   dist=vectorize(j)
+			   acc_seglen=0
+			}
+			acc_seglen+=seglen-rem
+			rem=0
+			traveled+=seglen
+			mark_coordinate(acc_seglen,traveled/L,j-1)
+			if (i==1) { seglen=L/nseg }
+		}
+	 }
+}
+}
+
+proc vertical_distance() { local n,norm
+	 sprint(cmd,"access %s",MORPH.origin_name) // soma
+	 execute(cmd)
+	 if (n3d()) {
+	 x0=new Vector()
+	 x0.append(x3d(0))
+	 x0.append(y3d(0))
+	 x0.append(z3d(0))
+	 }
+	 // define vortex as the farthest edge of the last section on the trunk
+	 forsec dendrite_apical_trunk_section_list { secref=new SectionRef() }
+	 access secref.sec
+	 n=n3d()
+	 if (n) {
+	 x2=new Vector() // vortex
+	 x2.append(x3d(n-1))
+	 x2.append(y3d(n-1))
+	 x2.append(z3d(n-1))
+	 x2.sub(x0) // translate vortex to soma reference point
+	 xtmp=x2.c // normalize vortex
+	 xtmp.mul(xtmp)
+	 norm=sqrt(xtmp.sum())
+	 x2.div(norm)
+	 }
+	 forsec dendrite_section_list { // dendrite segment
+	 	 if (n3d()) {
+		 for (x) {
+		 	 if (x>0 && x<1) {
+			 	x1=new Vector()
+			 	x1.append(x_co(x))
+				x1.append(y_co(x))
+				x1.append(z_co(x))
+				x1.sub(x0)
+				xtmp=x1.c
+				vdist_co(x)=abs(xtmp.dot(x2)) // project vector pointing to dendrite onto vortex unit vector
+			 }
+		 }
+		 }
+	 }
+}

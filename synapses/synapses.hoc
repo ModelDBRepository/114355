@@ -1,0 +1,722 @@
+/* NSYNS synapses are created and evenly distributed along the tree. They are fully defined with synaptic parameters and
+   in the case of NetStim input, with input statistics.
+   since each segment is in effect iso-potential, if more than one synapse is to inserted in a segment, then only one
+   syanpse will actually be inserted
+*/
+
+
+/* Querry examples:
+   ===============
+   NetStim
+   -------
+   Noise in the NetStim of one of the daughter synapses (num 0) of a selected Logical_Synapse (num 10) -
+   	logsynlist.object(10).synlist.object(0).pre().noise
+   Synapse/Logical_Synapse
+   -----------------------
+   Conductance of of one of the daughter synapses (num 0) of a selected Logical_Synapse (num 10) -
+   	logsynlist.object(10).synlist.object(0).syn().g
+   Alternatively, all daughter synapses to a selected Logical_Synapse have the same synaptic paremeters, thus -
+   	logsynlist.object(10).syn.g
+   Fast time constant of one of the Logical_Syanpses (num 2) onto a selected Section (num 3)
+   	sectlist.object(3).logsynlist.object(2).syn.tau1
+   section
+   -------
+   The section to which a Logical_Synapse (num 230) belongs to -
+   	logsynlist.object(230).sec.sec
+*/
+
+// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+
+begintemplate Distribution
+
+public name		// for result file names
+public full_name	// for selection list
+public filename		// for locating the distribution hoc file
+public unitname		// unit for synapse density
+public special_cmd	// special section segmentation insturctions
+
+strdef name,full_name,filename,unitname, special_cmd
+
+proc init() { local i,j
+	name=$s1
+	full_name=$s2
+	sprint(filename,"../synapses/distribution/%s",$s3)
+	unitname=$s4
+	special_cmd = $s5
+}
+endtemplate Distribution
+
+// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+// special distribution for the leafsec type
+// here leaf sections are segmented into a different number of segments
+proc leafsec() { local i
+	for i = 0, NLEAFSECS-1 {
+		branch = tree.branchlist.object(secLsorti.x(i))
+		branch.last_section.sec {
+			leafsec_section_list.append()
+			nseg = int(L/SEGLEN2)+1
+		}
+	}
+}
+
+
+// -----------------------------------------------------------------------
+proc prepare_distriblist() {
+	distriblist=new List()
+	distriblist.append(new Distribution("len","length","length.hoc","um",""))
+	distriblist.append(new Distribution("area","area","area.hoc","um^2",""))
+	distriblist.append(new Distribution("dist","distance","distance.hoc","um",""))
+	distriblist.append(new Distribution("seg","segment","segment.hoc","",""))
+	distriblist.append(new Distribution("leafsec","leafsec","leafsec.hoc","","leafsec()"))
+	distriblist.append(new Distribution("cable","cable","cable.hoc","",""))
+	distrib_select(SLCT_DISTRIB)
+}
+
+proc distrib_select() {
+	 if (CELL_CFG) {
+	 	SLCT_DISTRIB=$1
+	 	DISTRIB=distriblist.object(SLCT_DISTRIB)
+	 } else {
+	    distriblist.select(SLCT_DISTRIB)
+	 }
+}
+// after cell configuration has been completed the synaptic distribution file is loaded (called from cell.hoc)
+proc distrib_load_file() {
+	xopen(DISTRIB.filename)
+}
+
+proc syn_distance() { local i
+	for i=0,NLOGSYNS-1 {
+		logsyn=logsynlist.object(i)
+		logsyn.syn_distance()
+		logsyn.syn.Enumsyns = logsyn.numsyns
+//		logsyn.syn.Inumsyns = logsyn.numsyns
+		logsyn.syn.id = logsyn.id
+		sprint(cmd,"setpointer logsyn.syn.Vsoma, %s.v(0.5)",ORIGIN_NAME) // connect each synapse to the membrane potential at the soma
+		execute(cmd)
+	}
+/*	forsec dendrite_section_list {
+		insert vsum
+	}
+	sprint(cmd,"%s glb = new GlobalScal(0.5)",ORIGIN_NAME)
+	execute(cmd)
+	glb.dNSEG = dNSEG
+	sprint(cmd,"setpointer glb.vsoma, %s.v(0.5)",ORIGIN_NAME) // connect each synapse to the membrane potential at the soma
+	execute(cmd)*/
+}
+
+// independent procedure creating a data file where each row represents a section (or
+// node) and each couple is an x location on that section for a synapse and its SF value
+proc logsyn_datafile() { local i
+	for i=0,NUMNODE-1 {
+
+	}
+}
+
+// load an indicated range variable to logsyn.range (e.g. diam). called by the user
+proc range() { local i,sc
+	range_name=$s1
+	sc=1
+	if (numarg()>1) { sc=$2 }
+	for i=0,NLOGSYNS-1 {
+		logsyn=logsynlist.object(i)
+		logsyn.sec.sec {
+			sprint(cmd,"logsyn.range=%s(%g)*%g",range_name,logsyn.loc,sc)
+			execute(cmd)
+		}
+	}
+}
+
+// -----------------------------------------------------------------------
+
+proc make_gmax_copy() { local i
+	 gmax_copy=new Vector()
+//	 read_sf_records()
+	 COPY_RIP=RIPNUM
+	 COPY_RDP=RDPNUM
+	 for i=0,NLOGSYNS-1 {
+	 	 gmax_copy.append(logsynlist.object(i).syn.Egmax)
+	 }
+	 gmax_copy_exists=1
+}
+
+proc set_averaging() { local i // from simulation.hoc
+	for i=0,NLOGSYNS-1 {
+		logsyn=logsynlist.object(i)
+		logsyn.syn.avgstrt=VAVG_START
+		logsyn.syn.mavgstrt=MAVGstart
+		logsyn.syn.mavgintrvl=MAVGintrvl
+	}
+}
+
+proc label_gmax0() {
+	if (GMAX0_TYPE==0) { // uniform gmax0=GMAX0
+		sprint(str_GMAX0,"Initial gmax - Uniform %g",GMAX0)
+	} else if (GMAX0_TYPE==1) { // pasted
+		sprint(str_GMAX0,"Initial gmax - Pasted %d,%d",PASTED_RIP,PASTED_RDP)
+	} else if (GMAX0_TYPE==2) { // 1/input resistance
+		sprint(str_GMAX0,"Initial gmax - 1/input res * 100")
+	} else if (GMAX0_TYPE==3) { // uniformly randomly distibuted [0,2*ESF0]
+		sprint(str_GMAX0,"Initial gmax - ~U(%g,%g)",RANDOM_GMAX0_PARAMETER,2*GMAX0-RANDOM_GMAX0_PARAMETER)
+	}
+}
+
+proc set_logsyn_GMAX0() { local i, potentiation
+	n = numarg()
+	i=$1
+	logsyn=logsynlist.object(i)
+	potentiation = 1
+	if (n > 1) { // a call from a subgroup for updating potentiation
+		potentiation = $2
+	}
+	if (GMAX0_TYPE==0) { // uniform ESF0
+		logsyn.initial_gmax(GMAX0 * potentiation)		// should be ,ISF0)
+	} else if (GMAX0_TYPE==1) { 	// a copy of a previous RDP sf distribution
+		if (gmax_copy_exists) { // paste it
+			logsyn.initial_gmax(gmax_copy.x(i)  * potentiation)
+		} else {	// the sf values are supposed to be loaded
+			logsyn.initial_gmax(logsyn.syn.Egmax0 * potentiation)
+		}
+	} else if (GMAX0_TYPE==2) { // 1/input resistance
+		logsyn.initial_gmax(1/logsyn.resistance*100 * potentiation,GMAX0 * potentiation)	
+	} else if (GMAX0_TYPE==3) { // uniformly randomly distibuted [0,2*ESF0]
+		logsyn.initial_gmax(randgmax.repick() * potentiation,GMAX0 * potentiation)
+	} 
+	if (logsyn.subgroup_id) {
+		if (logsyn.subgroup.uniform_gmax0) {
+			logsyn.initial_gmax(logsyn.subgroup.gmax0)
+		}
+	}
+}
+
+proc set_GMAX0() { local ok,i
+	ok=$1
+	if (ok && GMAX0>=0) {
+		if (GMAX0_TYPE==1 && !gmax_copy_exists) {
+			dbox=new HBox()
+			dbox.dialog("First copy a gmax profile then paste it.")
+		} else {
+			if (GMAX0_TYPE==1) {
+				PASTED_RIP=COPY_RIP
+				PASTED_RDP=COPY_RDP
+			} else {
+				PASTED_RIP=-1
+				PASTED_RDP=-1
+			}
+			if (GMAX0_TYPE==3) {
+				randgmax=new Random(SEED_GMAX)
+				randgmax.uniform(RANDOM_GMAX0_PARAMETER,2*GMAX0-RANDOM_GMAX0_PARAMETER)
+			}
+			label_gmax0()
+			for i=0,NLOGSYNS-1 {
+				set_logsyn_GMAX0(i)
+			}
+		}
+		copyGMAX0=GMAX0
+		copyRANDOM_GMAX0_PARAMETER = RANDOM_GMAX0_PARAMETER
+		copySEED_GMAX = SEED_GMAX
+		write_GMAX0_records() // records.hoc
+	} else { 
+		GMAX0=copyGMAX0
+		RANDOM_GMAX0_PARAMETER = copyRANDOM_GMAX0_PARAMETER
+		SEED_GMAX = copySEED_GMAX
+	}
+}
+
+proc set_VEQ() { local ok,i
+	ok=$1
+	if (ok) {
+     		for i=0,NLOGSYNS-1 {
+			logsynlist.object(i).syn.Vtrg = VEQ
+		}
+		reclist.object(2).minaxis=VEQ-5
+		reclist.object(2).maxaxis=VEQ+5
+		copyVEQ=VEQ
+	 } else { VEQ=copyVEQ }
+}
+
+proc set_ORDER() { local ok,i
+	ok=$1
+	if (ok) {
+     		for i=0,NLOGSYNS-1 {
+			logsynlist.object(i).syn.order=ORDER
+			copyORDER=ORDER
+		}
+	 } else { ORDER=copyORDER }
+}
+
+proc set_CONTINUOUS() { local ok,i
+	ok=$1
+	if (ok) {
+     		for i=0,NLOGSYNS-1 {
+			logsynlist.object(i).syn.continuous_update=CONTINUOUS
+			copyCONTINUOUS=CONTINUOUS
+		}
+	 } else { CONTINUOUS=copyCONTINUOUS }
+}
+
+proc set_EVENT_WINDOW() { local ok,i
+	ok=$1
+	if (ok) {
+     		for i=0,NLOGSYNS-1 {
+			logsynlist.object(i).syn.event_window=EVENT_WINDOW
+			copyEVENT_WINDOW=EVENT_WINDOW
+		}
+	 } else { EVENT_WINDOW=copyEVENT_WINDOW }
+}
+
+// scaling type: 0 = Vsoma; 1 = <V> over synapses; 2 = local
+// global scaling (scaling_type 0 or 1): Eenable = 0
+// local scaling (scaling_type 2): Gsf = 1; Genable = 0
+// frozen: Eenable = Genable = 0
+proc set_SCALING_TYPE() { local ok,type
+	ok=$1
+	type = $2
+	if (ok) {
+		SCALING_TYPE = type
+		if (type == 0) { str_scaling_type = "Global: Vsoma"
+		} else if (type == 1) { str_scaling_type = "Local: Vi" }
+		str_scaling_copy = str_scaling_type
+		for i = 0, NLOGSYNS-1 {
+			logsynlist.object(i).syn.HSP_type = SCALING_TYPE
+		}
+		set_SCALE_ENABLE(1)
+	} else { SCALING_TYPE = copySCALING_TYPE }
+}
+
+proc set_SCALE_ENABLE() { local ok, type, i
+	ok=$1
+	if (ok) {
+		for i = 0, NLOGSYNS-1 {
+			logsynlist.object(i).syn.Eenable = SCALE_ENABLE
+		}
+		copySCALE_ENABLE = SCALE_ENABLE
+		if (!SCALE_ENABLE) { str_scaling_type = "Frozen"
+		} else { str_scaling_type = str_scaling_copy }
+	} else {
+		SCALE_ENABLE=copySCALE_ENABLE 
+	}
+	scale_enable=SCALE_ENABLE
+}
+
+proc set_TAU() { local ok,type,i
+	ok=$1
+	if (numarg()==2) { type=$2 // 0=inhibitory; 1=excitatory
+	} else { type=2 } // 2=both
+	if (ok) {
+		if (type==1 || type==2) { copyETAU=ETAU	}
+		if (type==0 || type==2) { copyITAU=ITAU	}
+    		for i=0,NLOGSYNS-1 {
+			if (type==1 || type==2) { logsynlist.object(i).syn.Etau=ETAU*1000 }
+//			if (type==0 || type ==2) { logsynlist.object(i).syn.Itau=ITAU*1000 }
+		}
+	} else {
+		if (type==1 || type==2) { ETAU=copyETAU }
+		if (type==0 || type ==2) { ITAU=copyITAU }
+	}
+}
+
+// -------------------------------------------------------------------------------
+
+proc set_SYNTAU1() { local ok,i
+	 ok=$1
+	 if (ok) {
+     	for i=0,NLOGSYNS-1 {
+			logsynlist.object(i).syn.tau1=SYNTAU1
+		}
+		copySYNTAU1=SYNTAU1
+	 } else { SYNTAU1=copySYNTAU1 }
+}
+
+proc set_SYNTAU2() { local ok,i
+	 ok=$1
+	 if (ok) {
+     	for i=0,NLOGSYNS-1 {
+			logsynlist.object(i).syn.tau2=SYNTAU2
+		}
+		copySYNTAU2=SYNTAU2
+	 } else { SYNTAU2=copySYNTAU2 }
+
+}
+
+proc set_EXCITATORY() { local ok,i
+	ok=$1
+	if (ok) {
+     	for i=0,NLOGSYNS-1 {
+//			logsynlist.object(i).syn.Eon=EXCITATORY
+		}
+	 } else { EXCITATORY=copyEXCITATORY }
+}
+
+proc set_INHIBITORY() { local ok,i
+	ok=$1
+	if (ok) {
+     	for i=0,NLOGSYNS-1 {
+//			logsynlist.object(i).syn.Ion=INHIBITORY
+		}
+	 } else { INHIBITORY=copyINHIBITORY }
+}
+
+proc set_SYNE() { local ok,i
+	 ok=$1
+	 if (ok) {
+     	for i=0,NLOGSYNS-1 {
+			logsynlist.object(i).syn.Ee=SYNE
+		}
+	 } else { SYNE=copySYNE }
+}
+
+proc set_ISYNE() { local ok,i
+	 ok=$1
+	 if (ok) {
+     	for i=0,NLOGSYNS-1 {
+//			logsynlist.object(i).syn.Ie=ISYNE
+		}
+	 } else { ISYNE=copyISYNE }
+}
+
+proc synapse_parameters_control_panel() {
+	synbox=new HBox()
+	synbox.intercept(1)
+		xpanel("kinetics")
+			xlabel("kinetics")
+			xvalue("rise (ms)","SYNTAU1",1,"set_SYNTAU1(RIP_check())") 
+			xvalue("decay (ms)","SYNTAU2",1,"set_SYNTAU2(RIP_check())") 
+		xpanel()
+		xpanel("excitatory")
+			xstatebutton("excitatory",&EXCITATORY,"set_EXCITATORY(RIP_check())")
+//			xvalue("gmax (uS)","SYNG",1,"set_SYNG(RIP_check())") 
+			xvalue("Esyn (mV)","SYNE",1,"set_SYNE(RIP_check())") 
+		xpanel()
+/*		
+		xpanel("inhibitory")
+			xstatebutton("inhibitory",&INHIBITORY,"set_INHIBITORY(RIP_check())")
+			xvalue("gmax (uS)","ISYNG",1,"set_ISYNG(RIP_check())") 
+			xvalue("Esyn (mV)","ISYNE",1,"set_ISYNE(RIP_check())") 
+		xpanel()
+*/		
+	synbox.intercept(0)
+	synbox.map("Synapse")
+}
+
+proc scaling_control() {
+	sclbox=new HBox()
+	sclbox.intercept(1)
+		xpanel("enable")
+			xlabel("enable")
+			xstatebutton("excitatory",&SCALE_ENABLE,"set_SCALE_ENABLE(RDP_check(),1)") // synapses.hoc
+//			xstatebutton("inhibitory",&ISCALE_ENABLE,"set_SCALE_ENABLE(RDP_check(),0)") // synapses.hoc
+		xpanel()
+		xpanel("slope")
+			xlabel("tau (sec)")
+			xvalue("excitatory","ETAU",1,"set_TAU(RDP_check(),1)") // synapses.hoc
+//			xvalue("inhibitory","ITAU",1,"set_TAU(RDP_check(),0)") // synapses.hoc
+		xpanel()
+		xpanel("initial")
+			xvarlabel(str_GMAX0)
+			xvalue("excitatory","GMAX0",1,"GMAX0_TYPE=0 set_GMAX0(RDP_check())")
+			xbutton("paste","GMAX0_TYPE=1 set_GMAX0(RDP_check())")
+//			xbutton("1/resistance","GMAX0_TYPE=2 set_GMAX0(RDP_check())")
+			xvalue("random","RANDOM_GMAX0_PARAMETER",1,"GMAX0_TYPE=3 set_GMAX0(RDP_check())")
+			xvalue("seed","SEED_GMAX",1,"GMAX0_TYPE=3 set_GMAX0(RDP_check())")
+		xpanel()
+		xpanel("veq")
+			xlabel("scaling rule")
+			xvalue("veq","VEQ",1,"set_VEQ(RDP_check())") // synapses.hoc
+			xstatebutton("0/1 order",&ORDER,"set_ORDER(RDP_check())")
+		xpanel()
+		xpanel("event_window")
+			xvarlabel(str_scaling_type)
+			xmenu("Scaling Type")
+				xbutton("Vsoma","set_SCALING_TYPE(RDP_check(),0)")
+				xbutton("Local","set_SCALING_TYPE(RDP_check(),1)")
+			xmenu()
+			xstatebutton("continuous",&CONTINUOUS,"set_CONTINUOUS(RDP_check())")
+			xvalue("window","EVENT_WINDOW",1,"set_EVENT_WINDOW(RDP_check())")
+		xpanel()
+/*
+			xmenu("initial SF") // synapses.hoc
+				xbutton("all SF=0","INITIAL=0 initial_SF(RDP_check())")
+				xbutton("all SF=1","INITIAL=1 initial_SF(RDP_check())",1)
+				xbutton("~U(0,2)","INITIAL=2 initial_SF(RDP_check())")
+				xbutton("SF paste","INITIAL=3 initial_SF(RDP_check())")
+			xmenu()
+*/
+	sclbox.intercept(0)
+	sclbox.map("Scaling")
+}
+/*
+proc STDP_control() {
+	stdpbox=new HBox()
+	stdpbox.intercept(1)
+		xpanel("enable")
+			xstatebutton("enable",&STDP_ENABLE,"set_STDP_ENABLE(RDP_check())") // synapses.hoc
+			xvalue("LTPmax","LTPmax",1,"set_LTPmax(RDP_check())")
+			xvalue("LTDmax","LTDmax",1,"set_LTDmax(RDP_check())")
+			xvalue("LTPt","LTPt",1,"set_LTPt(RDP_check())")
+			xvalue("LTDt","LTDt",1,"set_LTDt(RDP_check())")
+		xpanel()
+	stdpbox.intercept(0)
+	stdpbox.map()
+}
+*/
+// ==========================================================================
+// subgroup list
+proc prepare_subg_list() {
+	subg_list=new List()
+	subg_logsyn_list=new List()
+	str_subg="Subgroup"
+}
+
+// ---------------------------------------------------------------------------------
+
+proc clear_subg() { local i
+	if (NSUBGS) {
+		select_subg(NSUBGS-1)
+		for i=0,NSUBGS-1 {
+			delete_subg(1,0)	// just delete the list for the newly selected RDP
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------------
+// when there is a select("hoc_ac_") command function, the argument value must be checked, in case of a deleted list!
+proc select_subg() { local i,input
+	input=$1
+	if (input>=0) {
+		SELECTED_SUBG=input
+		SUBG=subg_list.object(SELECTED_SUBG)
+		subg_logsyn_list.remove_all()
+		for i=0,SUBG.nlogsyns-1 {
+			subg_logsyn_list.append(new String(SUBG.logsynlist.object(i).logsyn_name))
+		}
+		subg_list.select(SELECTED_SUBG)
+		select_subg_logsyn(0)
+		SUBG_ENABLE=SUBG.enable
+		SUBG_UNIFORM = SUBG.uniform_gmax0
+	}
+}
+
+proc create_subg() { local ok
+	ok=$1
+	if (ok) {
+		NSUBGS+=1
+		subg=new Subgroup(NSUBGS)
+//		subg.set_this(subg)
+		subg_list.append(subg)
+		select_subg(NSUBGS-1)
+	}
+}
+
+proc delete_subg() { local ok,type
+	ok=$1
+	type=$2	// 0=deletion due to switched RDP; 1=actual deletion of a subgroup
+	if (ok) {
+		SUBG.clear_all()
+		subg_logsyn_list.remove_all()
+		subg_list.remove(SELECTED_SUBG)
+		NSUBGS-=1
+		if (NSUBGS) {
+			select_subg(NSUBGS-1)
+		} else {
+			// find a way to delete the subgroup file
+		}
+		if (type==1) {
+			set_GMAX0(1) // resotore removed synapses' values
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------------
+
+proc select_subg_logsyn() { local input
+	input=$1
+	if (input>=0) {
+		SELECTED_SUBG_LOGSYN=input
+		subg_logsyn_list.select(SELECTED_SUBG_LOGSYN)
+	}
+	sprint(str_subg,"Subgroup %d %d syns",SUBG.id,SUBG.nsyns)
+}
+
+proc add_logsyn_to_subg() { local ok,singular
+	ok=$1
+	if (ok) {
+		logsyn=$o2
+		if (NSUBGS==0) { create_subg(1) }
+		singular=SUBG.add_logsyn(logsyn,SUBG)
+		if (singular) { subg_logsyn_list.append(new String(logsyn.logsyn_name)) }
+		select_subg_logsyn(SUBG.nlogsyns-1)
+//		set_SF0(1) // update sf0
+	}
+}
+
+proc add_branch_to_subg() { local ok,i
+	ok=$1
+	if (ok) {
+		branch=$o2
+		for i=0,branch.numlogsyn-1 {
+			add_logsyn_to_subg(1,branch.logsynlist.object(i))
+		}
+	}
+}
+
+
+proc remove_logsyn_from_subg() { local ok
+	ok=$1
+	if (ok && SELECTED_SUBG_LOGSYN>=0) {
+		logsyn=SUBG.logsynlist.object(SELECTED_SUBG_LOGSYN)
+		SUBG.remove_logsyn(SELECTED_SUBG_LOGSYN)
+		subg_logsyn_list.remove(SELECTED_SUBG_LOGSYN)
+		select_subg_logsyn(SUBG.nlogsyns)
+		set_logsyn_GMAX0(logsyn.id) // resotore removed synapses' values
+	}
+}
+
+// ---------------------------------------------------------------------------------
+
+proc set_subg_param() { local ok,i
+	ok=$1
+	if (ok) {
+		SUBG.uniform_gmax0=SUBG_UNIFORM
+		SUBG.update_param($2)
+	} else {
+		SUBG.reset_param()
+		SUBG_UNIFORM=SUBG.uniform_gmax0
+	}
+}
+
+proc set_subg_potentiation() { local ok,i
+	ok=$1
+	if (ok) {
+		SUBG.update_potentiation()
+	} else {
+		SUBG.reset_potentiation()
+	}
+}
+
+proc set_subg_enable() { local ok,i
+	ok=$1
+	if (ok) {
+		SUBG.enable=SUBG_ENABLE
+		for i=0,SUBG.nlogsyns-1 {
+			SUBG.logsynlist.object(i).syn.Eenable=SUBG_ENABLE
+		}
+	} else {
+		SUBG_ENABLE=SUBG.enable
+	}
+}
+
+// ---------------------------------------------------------------------------------
+
+proc subg_parameter_panel() { local j
+	xpanel("params")
+		xvalue("Efreq","SUBG.Efreq",1,"set_subg_param(RDP_check(),0)")
+		xvalue("Ecorr","SUBG.Ecorr",1,"set_subg_param(RDP_check(),0)")
+		xvalue("Ifreq","SUBG.Ifreq",1,"set_subg_param(RDP_check(),0)")
+		xstatebutton("uniform subgroup GMAX0",&SUBG_UNIFORM,"set_subg_param(RDP_check(),1)")
+		xvalue("gmax0","SUBG.gmax0",1,"set_subg_param(RDP_check(),1)")
+		xvalue("potentiation","SUBG.potentiation",1,"set_subg_potentiation(RDP_check())")
+//		xstatebutton("subgroup enable",&SUBG_ENABLE,"set_subg_enable(RDP_check())")
+	xpanel()
+}
+
+proc subg_control() {
+	subgbox=new HBox()
+	subgbox.intercept(1)
+		xpanel("subgroups")
+			subg_list.browser("Name","name")
+		xpanel()
+		xpanel("buttons")
+			xvarlabel(str_subg)
+			xbutton("new","create_subg(RDP_check())")
+			xbutton("show","subgroup_mark()") // plots.hoc
+			xbutton("delete","delete_subg(RDP_check(),1)")
+			xbutton("parameters","subg_parameter_panel()")
+		xpanel()
+		xpanel("synapses")
+			subg_logsyn_list.browser("Name","s")
+		xpanel()
+		xpanel("buttons")
+			xlabel("Logsyn")
+			xbutton("add","add_logsyn_to_subg(RDP_check(),LOGSYN)")
+			xbutton("add branch","add_branch_to_subg(RDP_check(),BRANCH)")
+			xbutton("remove","remove_logsyn_from_subg(RDP_check())")
+		xpanel()
+	subgbox.intercept(0)
+	subgbox.map("Subgroups")
+	subg_list.select_action("select_subg(hoc_ac_)")
+	subg_list.select(SELECTED_SUBG)
+	subg_logsyn_list.select_action("select_subg_logsyn(hoc_ac_)")
+	subg_logsyn_list.select(SELECTED_SUBG_LOGSYN)
+}
+
+// ---------------------------------------------------------------------------------
+
+proc write_subgroups() { local i,j,id
+	subg_file=$o1
+	nsubgs=subg_file.printf("NSUBGS = %d",NSUBGS) // number of subgroups
+ 	for i=0,NSUBGS-1 {
+		subg=subg_list.object(i)
+	 	subg_file.printf("\n\nSubgroup %d\tnlogsyns = %d\n",subg.id,subg.nlogsyns)
+		subg_file.printf("logsyns: ")
+		for j=0,subg.nlogsyns-1 {
+			subg_file.printf("%d ",subg.logsynlist.object(j).id)
+		}
+/*
+		for j=0,subg.num_param-1 {
+			subg_file.printf("%s %g\n",subg.param_name_list.object(j),param_value.x(j))
+		}
+*/
+		subg_file.printf("\nEfreq %g",subg.Efreq)
+		subg_file.printf("\ngmax0 %g",subg.gmax0)
+		subg_file.printf("\nunifrom_gmax0 %g",subg.uniform_gmax0)
+		subg_file.printf("\nenable %g",subg.enable)
+		subg_file.printf("\nIfreq %g",subg.Ifreq)
+		subg_file.printf("\nEcorr %g",subg.Ecorr)
+		subg_file.printf("\npotentiation %g",subg.potentiation)
+		subg_file.printf("\n* end subgroup") // "*" marks end of subgroup (so that parameters can be freely added in future
+	}
+}
+
+proc read_subgroups() { local i,j,k,id,nsubgs,var,n
+	clear_subg()
+	subg_file=$o1
+	subg_filename = $s2
+	subg_file.ropen(subg_filename)
+	nsubgs=subg_file.scanvar() // number of subgroups
+ 	for i=0,nsubgs-1 {
+	 	create_subg(subg_file.scanvar())
+		for j=0,subg_file.scanvar()-1 {
+			add_logsyn_to_subg(1,logsynlist.object(subg_file.scanvar()))
+		}
+		n=0
+		while(1) {
+			subg_file.scanstr(strng)
+			if (!strcmp(strng,"*")) { break }
+			if (n==0) { subg.Efreq=subg_file.scanvar() }
+			if (n==1) { subg.gmax0=subg_file.scanvar() }
+			if (n==2) {
+				subg.uniform_gmax0=subg_file.scanvar()
+				SUBG_UNIFORM=subg.uniform_gmax0
+			}
+////				subg.add_param(strng,subg_file.scanvar())
+			if (n==3) { 
+				subg.enable=subg_file.scanvar()
+				SUBG_ENABLE=subg.enable
+				for k=0,subg.nlogsyns-1 {
+					subg.logsynlist.object(k).syn.Eenable=SUBG_ENABLE
+				}
+			}
+			if (n==4) { subg.Ifreq=subg_file.scanvar() }
+			if (n==5) { subg.Ecorr=subg_file.scanvar() }
+			if (n==6) {
+				subg.potentiation=subg_file.scanvar()
+				subg.update_potentiation()
+			}
+			n+=1
+		}
+		subg.update_param(0)
+	}
+	select_subg(nsubgs-1)
+	subg_file.close
+}

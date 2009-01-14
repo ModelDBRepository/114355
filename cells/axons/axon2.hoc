@@ -1,0 +1,63 @@
+// Mainen and Sejnowski model axon (axon type 2)
+
+create axon_iseg,axon_hill,axon_myelin[NSEGAx],axon_node[NSEGAx]
+
+// --------------------------------------------------------------
+// Axon geometry
+// Similar to Mainen et al (Neuron, 1995)
+// --------------------------------------------------------------
+
+proc create_axon() { local i
+	 axon_hill_iseg_section_list=new SectionList()
+	 axon_myelin_section_list=new SectionList()
+	 axon_node_section_list=new SectionList()
+	 sprint(cmd,"access %s",MORPH.origin_name)
+	 execute(cmd)
+	 equiv_diam = sqrt(area(.5)/(4*PI)) // area = equiv_diam^2*4*PI
+	 if (numarg()) equiv_diam = $1
+	 axon_iseg {                // initial segment between hillock + myelin
+     	 	L = 15
+     	 	nseg = 5
+     	 	diam = equiv_diam/10        // see Sloper and Powell 1982, Fig.71
+		axon_hill_iseg_section_list.append()
+	 }
+	 axon_hill {
+	 	L = 10
+		nseg = 5
+		diam(0:1) = 4*axon_iseg.diam:axon_iseg.diam
+		axon_hill_iseg_section_list.append()
+	 }
+	 // construct myelinated axon with nodes of ranvier
+	 for i=0,NSEGAx-1 {
+	 	axon_myelin[i] {         // myelin element
+			nseg = 5
+		 	L = 100
+		 	diam = axon_iseg.diam
+			axon_myelin_section_list.append()
+     	 	}
+	 	axon_node[i] {           // nodes of Ranvier
+	 		nseg = 1
+		 	L = 1.0
+      		 	diam = axon_iseg.diam*.75       // nodes are thinner than axon
+			axon_node_section_list.append()
+		}
+	 }
+	 axon_attach()
+	 axon_hill connect axon_iseg(0), 1
+	 axon_iseg connect axon_myelin[0](0), 1
+	 axon_myelin[0] connect axon_node[0](0), 1
+	 for i=0,NSEGAx-2  {
+	 	 axon_node[i] connect axon_myelin[i+1](0), 1
+		 axon_myelin[i+1] connect axon_node[i+1](0), 1
+	 }
+}
+
+proc axon_attach() {
+	 sprint(cmd,"%s connect axon_hill(0), 0.5",MORPH.origin_name)
+	 execute(cmd)
+}
+
+proc axon_detach() {
+	 axon_hill disconnect()
+}
+

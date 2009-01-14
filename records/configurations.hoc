@@ -1,0 +1,916 @@
+/* There are several levels for configuring a simulation run:
+
+   1. Cell: morphology, channels, intersynaptic interval, segment length (this directly affects
+   	  the number of logical synapses, which are an elementary unit).
+   2. Run-Independent Parameters (RIP): all parameters that are not run dependent (including 
+   	  parameters for such simulations as BPAP, EPSP etc.).
+   3. Run Dependent Parameters (RDP): parameters that for a given cell and general configuration
+   	  are changed from run to run. 
+
+   Parameters may not be changed during a run (REALTIME=1), control.hoc will see to that.
+
+   Result files will be named according to these levels + the variable/vector being recorded.
+
+   A dummy 'New' configuration is used as a user selection for a new configuration. If there
+   are no configurations, the program 'selects' New by itself, so that there is always at least
+   one configuration in addition to the dummy 'New' one. 
+
+   Each configuration has a modifiable flag. As long as no records have been made with a given
+   configuration, it may still be modified (changing parameter values) and saved. Once Init&Run
+   has been selected, modifiable changes to 0 and parameters may no longer be changed. The only
+   thing that can be done is to delete the configuration, in which case, first all the record 
+   files are deleted (a seperate prompt for each file), then the parameters are deleted and finally
+   the configuration file is changed.
+
+*/
+
+// RIP = Run-Independent Parameters configuration
+// RDP = Run-Dependent Parameters configuration
+
+// NRIPS - number of RIP configurations
+// nRDPs - number of RDP configurations for a specific RIP
+// RIPNUM - id of current RIP configuration
+// RDPNUM - id of current RDP configuration
+// SLCT_RIPNUM - index in the RIP_list of the current RIP configuration
+// SLCT_RDPNUM - index in the RDP_list of the current RDP configuration
+
+
+// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+// external parameter setting etc.
+// ===================
+// this escapes the need to indicate all external possible parameter names
+proc direct_execute_file() {
+	xopen($s1)
+//	$o2.close
+}
+
+proc set_record() {
+	prm = $o1
+	sprint(assign, "param_val = %s", prm.name)
+	execute(assign)
+	if (prm.type == 0) {
+		sprint(record, "%s = %d", prm.name, param_val)
+	} else {
+		sprint(record, "%s = %g", prm.name, param_val)
+	}
+}
+
+// proc copy_parameters() {
+// 	prm = $o1
+// 	sprint(assign, "copy%s = %s", prm.name, prm.name)
+// }
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+begintemplate Parameter
+
+public name
+public type
+
+strdef name
+
+proc init() { local n
+	n = numarg()
+	name = $s1
+	type = 1		// type: 0 = integer; 1 = general (default)
+	if (n == 2) { type = $2 }
+}
+
+endtemplate Parameter
+
+proc prepare_paramlist() {
+	// name and type (0 = integer, 1 = general (default))
+	// RDP parameters
+	RDPparamlist = new List()
+	RDPparamlist.append(new Parameter("TSTOP", 0))
+	RDPparamlist.append(new Parameter("SCALE_ENABLE", 0))
+	RDPparamlist.append(new Parameter("ISCALE_ENABLE", 0))
+	RDPparamlist.append(new Parameter("INITIAL", 0))
+	RDPparamlist.append(new Parameter("GMAX0_TYPE"))
+	RDPparamlist.append(new Parameter("RANDOM_GMAX0_PARAMETER"))
+	RDPparamlist.append(new Parameter("SEED_GMAX"))
+	RDPparamlist.append(new Parameter("PASTED_RIP"))
+	RDPparamlist.append(new Parameter("PASTED_RDP"))
+	RDPparamlist.append(new Parameter("GMAX0"))
+	RDPparamlist.append(new Parameter("INTRVL_TYPE", 0))
+	RDPparamlist.append(new Parameter("EFREQ_VIVO"))
+	RDPparamlist.append(new Parameter("ECORR"))
+	RDPparamlist.append(new Parameter("IFREQ_VIVO"))
+	RDPparamlist.append(new Parameter("INTRVL_VIVO_VAR"))
+	RDPparamlist.append(new Parameter("BIN_VIVO", 0))
+	RDPparamlist.append(new Parameter("CONTINUOUS"))
+	RDPparamlist.append(new Parameter("EVENT_WINDOW"))
+	RDPparamlist.append(new Parameter("VEQ"))
+	RDPparamlist.append(new Parameter("ORDER", 0))
+	RDPparamlist.append(new Parameter("SCALING_TYPE", 0))
+	RDPparamlist.append(new Parameter("ETAU"))
+	RDPparamlist.append(new Parameter("ITAU"))
+	RDPparamlist.append(new Parameter("VRECdt"))
+	RDPparamlist.append(new Parameter("VRECpoints", 0))
+	RDPparamlist.append(new Parameter("RECdt"))
+	RDPparamlist.append(new Parameter("RECpoints", 0))
+	RDPparamlist.append(new Parameter("VAVG_START"))
+	RDPparamlist.append(new Parameter("MAVGintrvl"))
+	// RIP parameters
+	RIPparamlist = new List()
+	RIPparamlist.append(new Parameter("dt"))
+	RIPparamlist.append(new Parameter("SYNTAU1"))
+	RIPparamlist.append(new Parameter("SYNTAU2"))
+	RIPparamlist.append(new Parameter("EXCITATORY"))
+	RIPparamlist.append(new Parameter("INHIBITORY"))
+	RIPparamlist.append(new Parameter("SYNE"))
+	RIPparamlist.append(new Parameter("ISYNE"))
+	RIPparamlist.append(new Parameter("SPINEAREA"))
+	RIPparamlist.append(new Parameter("SOMA_ATTACH"))
+	RIPparamlist.append(new Parameter("AXON_ATTACH"))
+}
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// this template is both for RIP and RDP configurations
+begintemplate Configuration
+
+public id
+public rec_exist
+public saved
+public cfgname
+public cfgname
+public read_parameters
+public write_parameters
+public write_anal_file
+public set_as_default_anal
+public delete_parameters
+public set_as_default
+// -------------------
+public nRDPs
+public RDP_rec_exist
+public RDP_list
+public RDP_list_append
+public RDP_list_remove
+
+external CELL,RIPNUM,read_subgroups,write_subgroups,clear_subg,NSUBGS
+external read_selsecs, write_selsecs, clear_selsecs, NSELSECS
+
+external channel_write_parameters
+external channel_update_parameters
+external channel_reset_all
+external direct_execute_file
+external set_record, record
+//external copy_parameters
+// -------------------
+external AMPap
+external DURap
+external STEPap
+external NUMBERap
+external SPIKE_THRESHOLD
+external SPIKEstart
+external WINDOW
+external CUTOFF
+external NBINS
+
+strdef cfgname,param_filename,default_filename,execute_filename,copy_filename
+strdef param_dir
+strdef anal_filename,default_anal_filename,subgroup_filename, selsec_filename
+strdef cmd,sys
+objref param_file,default_file,execute_file,copy_file,anal_file,default_anal_file,subgroup_file, selsec_file
+// ------------------
+objref RDP
+objref RDP_list
+external RDPparamlist, RIPparamlist
+strdef param_name, cell_dir, rip_dir, rdp_dir
+
+proc init() {
+	saved=0  // flag: 0=parameters not saved; 1=parameters saved
+	type=$1	 // flag: 0=RDP; 1=RIP
+   	id=$2
+	rec_exist=$3 // flag: 0=no records yet; 1=records exist
+	sprint(cell_dir,"../records/files/%s",CELL)
+	if (type==0) { // RDP
+		RIPid=$4
+		sprint (rip_dir, "%s/RIP-%d", cell_dir, RIPid)
+		sprint(sys, "mkdir -p %s", rip_dir)
+		system(sys)
+		sprint (rdp_dir, "%s/RIP-%d/RDP-%d", cell_dir, RIPid, id)
+		sprint(sys, "mkdir -p %s", rdp_dir)
+		system(sys)
+		sprint(cfgname,"RDP config %d",id)
+		sprint(param_filename,"%s/RDP-parameters",rdp_dir)
+		sprint(default_filename,"../main/defaults/RDP-default.hoc")
+		sprint(execute_filename,"../main/defaults/RDP-execute.hoc")
+		sprint(copy_filename,"../main/defaults/RDP-copy.hoc")
+		sprint(anal_filename,"%s/analysis",rdp_dir)
+		sprint(subgroup_filename,"%s/subgroup",rdp_dir)
+		sprint(selsec_filename,"%s/selsec",rdp_dir)
+		sprint(default_anal_filename,"../main/defaults/analysis-default.hoc")
+	} else { // RIP
+		nRDPs=0
+		RDP_list=new List()
+		RDP_rec_exist=0 // counter for how many RDPs with existing records does the RIP have
+		sprint (rip_dir, "%s/RIP-%d", cell_dir, id)
+		sprint(sys, "mkdir -p %s", rip_dir)
+		system(sys)
+		sprint(cfgname, "RIP config %d", id)
+		sprint(param_filename,"%s/RIP-parameters",rip_dir)
+		sprint(default_filename,"../main/defaults/RIP-default.hoc")
+		sprint(execute_filename,"../main/defaults/RIP-execute.hoc")
+		sprint(copy_filename,"../main/defaults/RIP-copy.hoc")
+	}
+}
+
+// only relevant for the RIP case, adds an RDP to the RIP list
+proc RDP_list_append() { local RDPid,RDPrec
+	 RDPid=$1
+	 RDPrec=$2
+	 RDP=new Configuration(0,RDPid,RDPrec,id)
+	 RDP_list.append(RDP)
+	 nRDPs+=1
+}
+
+proc RDP_list_remove() { local RDPind
+	 RDPind=$1
+	 RDP_list.remove(RDPind)
+	 nRDPs-=1
+}
+
+proc read_parameters() { local i, file_exists
+	read_default_parameters() // first of all read default (so that parameters later added can be used)
+	if (type==0) { // then (if this an RDP) read analysis and subgroup files if they exist
+		anal_file=new File()
+		file_exists=anal_file.ropen(anal_filename)
+		anal_file.close()
+		if (file_exists) {
+			direct_execute_file(anal_filename, anal_file)
+		} else {
+			direct_execute_file(default_anal_filename, default_anal_file)
+		}
+		subgroup_file=new File()
+		file_exists=subgroup_file.ropen(subgroup_filename)
+		subgroup_file.close()
+		if (file_exists) { // synapses.hoc
+			read_subgroups(subgroup_file, subgroup_filename)
+		} else if (NSUBGS) {
+			clear_subg()
+		}
+		selsec_file=new File()
+		file_exists=selsec_file.ropen(selsec_filename)
+		selsec_file.close()
+		if (file_exists) { // cell.hoc
+			read_selsecs(selsec_file, selsec_filename)
+		} else if (NSELSECS) {
+			clear_selsecs()
+		}
+	 }
+	 param_file=new File() // then try to update them if a specific paramter file exists for this configuration
+	 file_exists=param_file.ropen(param_filename)
+	 param_file.close()
+	 if (file_exists) { 
+		direct_execute_file(param_filename, param_file) // configurations.hoc
+	}
+	execute_file=new File()
+	file_exists=execute_file.ropen(execute_filename)
+	execute_file.close()
+	if (file_exists) {
+		direct_execute_file(execute_filename, execute_file)
+	} else { 
+		print "execute file does not exist!"
+	}
+/*	for i = 0, RDPparamlist.count - 1 {
+		copy_parameters(RDPparamlist.object(i))
+	}
+	for i = 0, RIPparamlist.count - 1 {
+		copy_parameters(RIPparamlist.object(i))
+	}*/
+	copy_file=new File()
+	file_exists=copy_file.ropen(copy_filename)
+	copy_file.close()
+	if (file_exists) {
+		direct_execute_file(copy_filename, copy_file)
+	} else {
+		print "copy file does not exist!"
+	}
+}
+
+proc read_default_parameters() { local file_exists
+	default_file=new File()
+	file_exists=default_file.ropen(default_filename)
+	default_file.close()
+	if (file_exists) {
+		direct_execute_file(default_filename, default_file) // configurations.hoc
+	} else {
+		print "no default parameter file!"
+	}
+	if (type==1) { // for RIP, read default channel parameters from template
+		channel_reset_all(2,1,1) // conductance; cell.hoc
+		channel_reset_all(2,1,2) // membrane; cell.hoc
+	}
+}
+
+// parameters are written in hoc code so that reading them is done with xopen()
+proc write_parameters() { local i, file_exists, check, param_val, param_type
+	param_file=new File()
+	check = param_file.wopen(param_filename)
+	if (type==0) { // RDP parameters
+		param_file.printf("// RDP %d Parameters\n",id)
+		param_file.printf("// =================\n")
+		for i = 0, RDPparamlist.count - 1 {
+			set_record(RDPparamlist.object(i))
+			param_file.printf("%s\n", record)
+		}
+	} else { // RIP parameters
+		param_file.printf("// RIP %d Parameters\n",id)
+		param_file.printf("// =================\n")
+		for i = 0, RIPparamlist.count - 1 {
+			set_record(RIPparamlist.object(i))
+			param_file.printf("%s\n", record)
+		}
+		channel_write_parameters(param_file) // cell.hoc
+ 	}
+	param_file.close()
+	// subgroup file
+	subgroup_file=new File()
+	if (NSUBGS) {
+		// when creating a new RIP where the first RDP has a subgroup, there is no subgroup file for the RIP (no filename)
+		check = subgroup_file.wopen(subgroup_filename)
+		if (check) { write_subgroups(subgroup_file) } // synapses.hoc
+		subgroup_file.close()
+	} else {
+		file_exists = subgroup_file.ropen(subgroup_filename)
+		if (file_exists) {
+			subgroup_file.unlink()
+		}
+	}
+	// selsec file
+	selsec_file=new File()
+	if (NSELSECS) {
+		check = selsec_file.wopen(selsec_filename)
+		if (check) { write_selsecs(selsec_file) } // cell.hoc
+		selsec_file.close()
+	} else {
+		file_exists=selsec_file.ropen(selsec_filename)
+		if (file_exists) {
+			selsec_file.unlink()
+		}
+	}
+	saved=1
+}
+
+proc write_anal_file() {
+	 if (type==0) {
+	 	anal_file=new File()
+		anal_file.wopen(anal_filename)
+		anal_file.printf("// Analysis Parameters\n")
+		anal_file.printf("// ===================\n")
+		anal_file.printf("AMPap=%g\n",AMPap)
+		anal_file.printf("DURap=%g\n",DURap)
+		anal_file.printf("STEPap=%g\n",STEPap)
+		anal_file.printf("NUMBERap=%g\n",NUMBERap)
+		anal_file.printf("SPIKE_THRESHOLD=%g\n",SPIKE_THRESHOLD)
+		anal_file.printf("SPIKEstart=%g\n",SPIKEstart)
+		anal_file.printf("SPIKEstart=%g\n",SPIKEstart)
+		anal_file.printf("WINDOW=%g\n",WINDOW)
+		anal_file.printf("CUTOFF=%g\n",CUTOFF)
+		anal_file.printf("NBINS=%g\n",NBINS)
+		anal_file.close()
+	 }
+}
+
+proc delete_parameters() { local file_exists
+/*	param_file=new File()
+	file_exists=param_file.ropen(param_filename)
+	if (file_exists) { param_file.unlink() }
+	param_file.close()*/
+	if (type == 0) { // rdp
+/*		anal_file=new File()
+		file_exists=anal_file.ropen(anal_filename)
+		if (file_exists) { anal_file.unlink() }
+		anal_file.close()*/
+		sprint(sys, "rm -r %s", rdp_dir)
+		system(sys)
+	} else { // rip
+		sprint(sys, "rm -r %s", rip_dir)
+		system(sys)
+	}
+}
+
+proc set_as_default() { local param_val, param_type
+	default_file=new File()
+	default_file.wopen(default_filename)
+	if (type==0) { // RDP parameters
+		default_file.printf("// RDP DEFAULT Parameters\n")
+		default_file.printf("// ======================\n")
+		for i = 0, RDPparamlist.count - 1 {
+			set_record(RDPparamlist.object(i))		// external
+			default_file.printf("%s\n", record)
+		}
+	} else { // RIP parameters
+		default_file.printf("// RIP DEFAULT Parameters\n")
+		default_file.printf("// ======================\n")
+		for i = 0, RIPparamlist.count - 1 {
+			set_record(RIPparamlist.object(i))	// external
+			default_file.printf("%s\n", record)
+		}
+ 	}
+	default_file.close()
+}
+
+proc set_as_default_anal() {
+	 if (type==0) {
+	 	default_anal_file=new File()
+		default_anal_file.wopen(default_anal_filename)
+		default_anal_file.priRDP.read_parameters()ntf("// Analysis DEFAULT Parameters\n")
+		default_anal_file.printf("// ===========================\n")
+		default_anal_file.printf("AMPap=%g\n",AMPap)
+		default_anal_file.printf("DURap=%g\n",DURap)
+		default_anal_file.printf("STEPap=%g\n",STEPap)
+		default_anal_file.printf("NUMBERap=%g\n",NUMBERap)
+		default_anal_file.printf("SPIKE_THRESHOLD=%g\n",SPIKE_THRESHOLD)
+		default_anal_file.printf("SPIKEstart=%g\n",SPIKEstart)
+		default_anal_file.printf("WINDOW=%g\n",WINDOW)
+		default_anal_file.printf("CUTOFF=%g\n",CUTOFF)
+		default_anal_file.printf("NBINS=%g\n",NBINS)
+		default_anal_file.close()
+	 }
+}
+
+endtemplate Configuration
+
+// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+// initialization (entire configuration structure)
+// ===============================================
+
+// read configuration structure and the parameter values
+proc read_configurations() { local i,j,RDP_num,file_exists
+	 browser_RIP_list=new List()
+	 browser_RDP_list=new List()
+	 RIP_list=new List()
+	 cfg_file=new File()
+	 sprint(cfg_filename,"../records/files/%s/%s-configurations", CELL, CELL)
+	 file_exists=cfg_file.ropen(cfg_filename)
+	 if (file_exists) {
+	 	 NRIPS=cfg_file.scanvar() // number of RIP configurations
+	 	 for i=0,NRIPS-1 {
+		 	 // RIP configurations (type=1,id,modifiable)
+		 	 RIPp=new Configuration(1,cfg_file.scanvar(),cfg_file.scanvar())
+		 	 RIPp.saved=1 // an existing configuration is considered saved
+			 for j=0,cfg_file.scanvar()-1 {
+			 	 // RDP configurations (id,modifiable)
+		 	 	 RIPp.RDP_list_append(cfg_file.scanvar(),cfg_file.scanvar())
+				 RDPp=RIPp.RDP_list.object(j)
+				 if (RDPp.rec_exist) { RIPp.RDP_rec_exist+=1 }
+				 RDPp.saved=1 // an existing configuration is considered saved
+		 	 }
+		 	 RIP_list.append(RIPp)
+	 	 }
+		 cfg_file.close()
+	 } else { // no previous RIP sns for this cell, so create a new one with (id=1,RDPsn_num=1)
+   	   	 NRIPS=0
+	   	 RIP_new()
+	 }
+	 browser_RIP_list_update()
+	 SLCT_RIPNUM=NRIPS-1
+	 RIP=RIP_list.object(SLCT_RIPNUM)
+//	SLCT_RDPNUM = RIP.nRDPs
+	 RDP=RIP.RDP_list.object(SLCT_RDPNUM)
+	 RIP_selection(SLCT_RIPNUM)
+}
+
+proc write_configurations() { local i,j,RDP_num
+	 cfg_file=new File()
+	 sprint(cfg_filename,"../records/files/%s/%s-configurations", CELL, CELL)
+	 cfg_file.wopen(cfg_filename)
+	 cfg_file.printf("NRIPS = %d",NRIPS)
+	 for i=0,NRIPS-1 {
+	 	 RIPp=RIP_list.object(i)
+	 	 cfg_file.printf("\n\nRIP %d ( %d )\nnRDPs = %d\n",RIPp.id,RIPp.rec_exist,RIPp.nRDPs)
+		 for j=0,RIPp.nRDPs-1 {
+		 	 RDPp=RIPp.RDP_list.object(j)
+		 	 cfg_file.printf("RDP %d ( %d )\t",RDPp.id,RDPp.rec_exist)
+		 }
+	 }
+	 cfg_file.close()
+}
+
+// -----------------------------------------------------------------------------------------
+
+// a specific configuration
+// ========================
+
+
+// user procedure for switiching to an indicated configuration
+proc change_configuration() { local rip, rdp
+	rip = $1
+	rdp = $2
+	// change to indicated RIPNUM1
+	RIPNUMmanual = rip
+	RIP_manual_selection() // configurations.hoc
+	// change to indicated RDPNUM1
+	RDPNUMmanual = rdp
+	RDP_manual_selection() // configurations.hoc
+}
+
+// opening (by selecting from the list)
+// ------------------------------------
+
+proc RIP_manual_selection() { local i, found, ifound
+	found = 0
+	for i = 0, RIP_list.count - 1 {
+		if (RIPNUMmanual == RIP_list.object(i).id) {
+			found = 1
+			ifound = i
+			break
+		}
+	}
+	if (found) {
+		RIP_selection(ifound)
+	} else {
+		RIPNUMmanual = RIPNUM
+	}	
+}
+
+proc RIP_selection() { local input
+	 // when the browser list is updated, a failure -1 input arrives, which should be disregarded
+	 input=$1
+	 if (input>=0) {
+ 	 	SLCT_RIPNUM=input
+		if (SLCT_RIPNUM != RIPNUM) {
+			RIP_save() // first save previous configuration
+     			RIP=RIP_list.object(SLCT_RIPNUM)
+		 	RIPNUM=RIP.id
+			RIPNUMmanual = RIPNUM
+		 	RIP.read_parameters()
+		 	browser_RIP_list_update()
+	 		RDP_selection(RIP.nRDPs-1) // as default, open last RDP on the list
+		}
+	 }
+}
+
+proc RDP_manual_selection() { local i, found, ifound
+	found = 0
+	for i = 0, RIP_list.object(SLCT_RIPNUM).RDP_list.count - 1 {
+		if (RDPNUMmanual == RIP_list.object(SLCT_RIPNUM).RDP_list.object(i).id) {
+			found = 1
+			ifound = i
+			break
+		}
+	}
+	if (found) {
+		RDP_selection(ifound)
+	} else {
+		RDPNUMmanual = RDPNUM
+	}	
+}
+
+proc RDP_selection() { local input
+	 input=$1
+	 if (input>=0) {
+	 	SLCT_RDPNUM=$1
+		if (SLCT_RDPNUM != RDPNUM) {
+			RDP_save()
+		 	RDP=RIP_list.object(SLCT_RIPNUM).RDP_list.object(SLCT_RDPNUM)
+		 	RDPNUM=RDP.id
+			RDPNUMmanual = RDPNUM
+			RDP.read_parameters()
+		 	browser_RDP_list_update()
+		 	reset_records()
+			read_constant_records()
+		}
+	 }
+}
+
+// -----------------------------------------------------------------------------------------
+
+proc browser_RIP_list_update() { local i
+	 strdef svd,mdf,name,cfgname
+	 browser_RIP_list.remove_all()
+	 for i=0,NRIPS-1 {
+	 	 RIPp=RIP_list.object(i)
+	 	 name=RIPp.cfgname
+		 mdf="" // no record sign
+		 svd="" // saved sign
+		 if (!RIPp.rec_exist && !RIPp.RDP_rec_exist) { mdf=" (nr)" }
+		 if (!RIPp.saved) { svd="*" }
+		 sprint(cfgname,"%s%s%s",svd,name,mdf)
+	 	 browser_RIP_list.append(new Name(cfgname))
+//	 	 browser_RIP_list.append(new String(cfgname))
+	 }
+	 browser_RIP_list.select(SLCT_RIPNUM)
+}
+
+proc browser_RDP_list_update() { local i
+	 strdef svd,mdf,name,cfgname
+	 browser_RDP_list.remove_all()
+	 for i=0,RIP.nRDPs-1 {
+	 	 name=RIP.RDP_list.object(i).cfgname
+		 mdf="" // no record sign
+		 svd="" // saved sign
+		 if (!RIP.RDP_list.object(i).rec_exist) { mdf=" (nr)" }
+		 if (!RIP.RDP_list.object(i).saved) { svd="*" }
+		 sprint(cfgname,"%s%s%s",svd,name,mdf)
+	 	 browser_RDP_list.append(new Name(cfgname))
+//	 	 browser_RDP_list.append(new String(cfgname))
+	 }
+	 browser_RDP_list.select(SLCT_RDPNUM)
+}
+
+// -----------------------------------------------------------------------------------------
+
+// new
+// ---
+
+proc RIP_new() { local answer
+	 answer=1
+	 if (NRIPS) { // there already exists at least one RIP
+	 	strdef question
+	 	question="Would you like to create a new RIP configuration?"
+	 	dbox=new HBox()
+	 	answer=dbox.dialog(question,"yes","no")
+	 }
+	 if (answer) {
+	 	if (NRIPS) { // if this is not the very first RIP, save previous configuration
+		   RIP_save() 
+	 	   if (RIP.nRDPs) { RDP_save() }
+		}
+	 	RIPNUM=allocate_id(NRIPS,RIP_list)
+	 	RIP=new Configuration(1,RIPNUM,0) // (type=1,id,rec_exist)
+		RIP_list.append(RIP)
+ 	 	NRIPS+=1
+		SLCT_RIPNUM=NRIPS-1 // the new RIP configuration is last on the RIP_list
+	 	browser_RIP_list_update()
+		RDP_new()
+	 }
+}
+
+proc RDP_new() { local answer
+	 answer=1
+	 if (RIP.nRDPs) {
+	 	strdef question
+	 	question="Would you like to create a new RDP configuration?"
+	 	dbox=new HBox()
+	 	answer=dbox.dialog(question,"yes","no")
+	 }
+	 if (answer) {
+//	 	if (NRIPS) { RIP_save() } // first save previous configuration
+	 	if (RIP.nRDPs) { RDP_save() }
+	 	RDPNUM=allocate_id(RIP.nRDPs,RIP.RDP_list)
+	 	RIP.RDP_list_append(RDPNUM,0)
+		SLCT_RDPNUM=RIP.nRDPs-1
+		RDP=RIP.RDP_list.object(SLCT_RDPNUM)
+	 	write_configurations()
+	 	browser_RDP_list_update()
+//	 	RIP_selection() 
+	 	reset_records()
+	 }
+}
+
+// allocate id
+// -----------
+func allocate_id() { local i,id,maxid,N
+	 N=$1
+	 tmplist=$o2
+	 if (N) {
+	 	tmpvec=new Vector()
+	 	for i=0,N-1 {
+	 		tmpvec.append(tmplist.object(i).id)
+	 	}
+	 	tmpvec.sort()
+	 	maxid=tmpvec.x(N-1) // last on the sorted vector
+	 	if (maxid==N-1) { // the id numbers are exhausted
+	 	   id=maxid+1
+	 	} else { // there are 'holes' in the sequence of id numbers
+	       for id=0,maxid {
+	 	   	   if (tmpvec.indwhere("==",id)==-1) { break }
+	 	   }
+	 	}
+	 } else {
+	    id=0
+	 }
+	 return id
+}
+
+// -----------------------------------------------------------------------------------------
+
+// save
+// ----
+
+// an argument means user initiated: check modifiable and prompt user 
+proc RIP_save() {
+	 if (!RIP.rec_exist && !RIP.saved) {
+	 	RIP.write_parameters()
+	 	browser_RIP_list_update()
+	 }
+	 if (numarg()==1 && RIP.rec_exist) {
+	    strdef notice
+		sprint(notice,"%s may not be modified (records exist)!",RIP.cfgname)
+	    dbox=new HBox()
+		dbox.dialog(notice)
+	 }
+}
+
+proc RDP_save() {
+	 if (!RDP.rec_exist && !RDP.saved) {
+	    RDP.write_parameters()
+	    write_GMAX0_records()
+ 	    browser_RDP_list_update()
+	 }
+	 if (numarg()==1 && RDP.rec_exist) {
+	    strdef notice
+		sprint(notice,"%s (of %s) may not be modified (records exist)!",RDP.cfgname,RIP.cfgname)
+	    dbox=new HBox()
+		dbox.dialog(notice)
+	 }
+}
+
+proc RDP_anal_save() {
+	 RDP.write_anal_file()
+}
+
+proc RDP_anal_default_save() { local answer
+	 dbox=new HBox()
+	 answer=dbox.dialog("Are you sure you want these analysis parameters saved as default?","yes","no")
+	 if (answer) { RDP.set_as_default_anal() }
+}
+
+
+
+// -----------------------------------------------------------------------------------------
+
+// from 'Init & Run' (running a RIP simulation)
+proc RIP_lock() {
+	 if (!RIP.rec_exist) {
+	 	if (!RIP.saved) { RIP.write_parameters() } // this is a final save before running a simulation.
+ 	 	RIP.rec_exist=1 
+	 	write_configurations() // a configuration turned non modifiable is recorded
+		browser_RIP_list_update() // and the (nr) is removed from the confirguration name
+	 }
+}
+
+proc RIP_unlock() {
+	 RIP.rec_exist=0
+	 write_configurations()
+	 browser_RIP_list_update()
+}
+
+proc RDP_lock() {
+	 if (!RDP.rec_exist) {
+	 	if (!RDP.saved) { RDP.write_parameters() } // this is a final save before running a simulation.
+	 	if (!RIP.saved) { RIP.write_parameters() } // this is a final save before running a simulation.
+ 	 	RDP.rec_exist=1   
+		RIP.RDP_rec_exist+=1 // increment number of RDPs with records (not modifiable)
+	 	write_configurations() // a configuration turned non modifiable is recorded
+		browser_RDP_list_update() // and the (nr) (no records) is removed from the confirguration name
+		browser_RIP_list_update() // and the (nr) is removed from the confirguration name
+	 }
+}
+
+proc RDP_manual_unlock() { local answer
+	if (RDP.rec_exist) { // if RDP has records
+		strdef question
+		sprint(question,"Unlock %s (parameters may be changed and no longer match existing records)?",RDP.cfgname)
+		dbox=new HBox()
+		answer=dbox.dialog(question,"yes","no")
+		if (answer) {
+			RDP_unlock()
+		}
+	}
+}
+
+proc RDP_unlock() {
+	 RIP.RDP_rec_exist-=1
+	 RDP.rec_exist=0
+	 write_configurations()
+	 browser_RDP_list_update()
+	 browser_RIP_list_update()
+}
+
+// -----------------------------------------------------------------------------------------
+
+// deleting (by pressing the 'delete' button)
+// ------------------------------------------
+
+// delete the configuration with all its record files and parameter files
+// when a RIP is deleted this includes all the RPDs associated to it! 
+proc RIP_delete() { local answer,all
+	if (numarg()==0) { // called from control.hoc - request to directly delete the RIP
+		dbox=new HBox()
+		dbox.dialog("For safety measures, to delete a RIP configuration, delete its RDPs one by one!")
+	} else { // called from RDP_delete() after last RDP has been deleted
+		if (RIP.rec_exist) { // if RIP has records
+			all=0
+			strdef question
+			sprint(question,"Delete %s record files?",RIP.cfgname)
+			dbox=new HBox()
+			answer=dbox.dialog(question,"yes","no")
+			if (answer) {
+				// delete RIP records one by one
+//				all=delete_run_independent_records() // if all records where chosen to be deleted, all=1
+				all = 1 // skip individual deletion
+			} else {
+				RDP_new()
+			}
+			// if no more records exist, configuration becomes modifiable
+			if (all) {
+//				RIP.rec_exist=0
+				RIP_unlock()
+			}
+		}
+		if (!RIP.rec_exist) { // either initially or as a result of deletion no RIP records exist
+			sprint(question,"Are you sure you want to delete %s?",RIP.cfgname)
+			dbox=new HBox()
+			answer=dbox.dialog(question,"yes","no")
+			if (answer) {
+				RIP.delete_parameters()
+				RIP_list.remove(SLCT_RIPNUM)
+				NRIPS-=1
+				if (NRIPS) {
+					SLCT_RIPNUM=NRIPS-1
+					RIP=RIP_list.object(SLCT_RIPNUM)
+//					RIPNUM=RIP.id
+					SLCT_RDPNUM=RIP.nRDPs-1
+					RDP=RIP.RDP_list.object(SLCT_RDPNUM)
+					RDPNUM=RDP.id
+				} else {
+					RIP_new()
+				}
+			} else {
+				RDP_new()
+			}
+		}
+		write_configurations()
+//		browser_RIP_list_update()
+//		browser_RDP_list_update()
+//		 RIP_selection(NRIPS-1)
+		 RIP_selection(SLCT_RIPNUM)
+	}
+}
+
+proc RDP_delete() { local answer,all
+	 all=1
+	 if (RDP.rec_exist) { // if RDP has records
+	 	all=0
+	 	strdef question
+	 	sprint(question,"Delete %s record files?",RDP.cfgname)
+	 	dbox=new HBox()
+	 	answer=dbox.dialog(question,"yes","no")
+	 	if (answer) {
+	 	   // delete RDP records one by one
+//	 	   all=delete_run_dependent_records() // if all records where chosen to be deleted, all=1
+			all = 1 // skip individual deletion
+	 	}
+	 	// if no more records exist, configuration becomes modifiable
+	 	if (all) {
+		   RDP_unlock()
+//		   RIP.RDP_rec_exist-=1
+//	 	   RDP.rec_exist=0
+		}
+//	 	write_configurations()
+//	 	browser_RDP_list_update()
+//	 	browser_RIP_list_update()
+	 }
+	 if (all) {
+	 	sprint(question,"Are you sure you want to delete %s?",RDP.cfgname)
+	 	dbox=new HBox()
+	 	answer=dbox.dialog(question,"yes","no")
+	 	if (answer) {
+	 	   RDP.delete_parameters()
+		   RIP.RDP_list_remove(SLCT_RDPNUM)
+		   if (!RIP.nRDPs) { RIP_delete(1) // argument signifies this is an internal call
+		   } else {
+			  SLCT_RDPNUM=RIP.nRDPs-1
+			  RDP=RIP.RDP_list.object(SLCT_RDPNUM)
+//			  RDPNUM=RDP.id
+			  write_configurations()
+//			  browser_RDP_list_update()
+//			 RDP_selection(RIP.nRDPs-1)
+			 RDP_selection(SLCT_RDPNUM)
+		   }
+	    }
+	 }
+}
+
+// -----------------------------------------------------------------------------------------
+
+proc RIP_set_as_default() { local answer
+	strdef question
+	dbox=new HBox()
+	sprint(question,"Are you sure you want to set %s parameters as default?",RIP.cfgname)
+	answer=dbox.dialog(question,"Yes","No")
+	if (answer) { RIP.set_as_default() }
+}
+
+// -----------------------------------------------------------------------------------------
+
+func RIP_check() {
+//	 if (!RIP.rec_exist && !RIP.RDP_rec_exist && RIP.saved) {
+	 if (!RIP.rec_exist && !RIP.RDP_rec_exist) {
+	 	RIP.saved=0
+		browser_RIP_list_update()
+		return 1
+	 } else { return 0 }
+}
+
+func RDP_check() {
+//	 if (!RDP.rec_exist && RDP.saved) {
+	 if (!RDP.rec_exist) {
+	 	RDP.saved=0
+		browser_RDP_list_update()
+	 }
+	 return 1-RDP.rec_exist
+}

@@ -1,0 +1,52 @@
+// insert the synapses along the tree in more or less SYNINT intervals; since each segment is in effect iso-potential, if more
+// than one synapse is to inserted in a segment, then only one syanpse will actually be inserted, however, this single
+// logical synapse will be fed by the required number of NetStim stimulators [see source_attach()]
+proc synlocate() { local i,sl,ll,j,loc,thisseg,prevseg
+	objref node
+	i=-1
+	NSYNS=0
+	NLOGSYNS=0
+	prevseg=0 // previous segment is initialized to 0
+	sl=SYNINT // remaining distance to next synapse location
+	objref logsyn,logsynlist
+	logsynlist=new List()	// list of Synapse objects
+	browser_logsynlist=new List()
+	for j=0,dNSEC-1 {
+		node=nodelist.object(j)
+		node.sec.sec {
+			ll=L // remaining section length
+			while (ll>0) { // as long as there is a remaining section length
+				if (ll<=sl) { // if it is too short
+					sl-=ll // subtract it from remaining distance for synapse location
+					ll=0  // no more remaining section length
+				} else { // if it is long enough
+					ll-=sl // subtract remaining distance for synapse location from it
+					sl=SYNINT // reset synapse location for next synapse
+					loc=(L-ll)/L
+					thisseg=this_node(loc)
+					if (thisseg==prevseg) { // if location is in the same segment of the latest created synapse
+						NSYNS+=1
+						logsynlist.object(i).numsyns+=1 // increase synapse counter for current location i
+					} else { // physically create a new logical synapse
+						NSYNS+=1
+						i+=1
+						logsyn=new Logical_Synapse(node,distance(loc),loc,i)
+						logsyn.syn=new ScalExp2Syn(loc) // add a new synapse at location
+/*
+						logsyn.syn.tau1=SYNTAU1
+						logsyn.syn.tau2=SYNTAU2
+						logsyn.syn.e=SYNE
+						logsyn.syn.gmax=SYNG
+*/
+						logsynlist.append(logsyn)
+						node.logsynlist.append(logsyn)
+						node.update_branches(logsyn) // update branch synloglist
+					}
+					prevseg=thisseg
+				}
+			}
+		}
+	}
+	NLOGSYNS=i+1	// number of actual location (NLOCS<=NSYNS)
+	LOGSYN=BRANCH.logsynlist.object(SLCT_LOGSYN)
+}

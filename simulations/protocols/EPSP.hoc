@@ -1,0 +1,95 @@
+// create single EPSP at each synapse and record the voltage measured at that synapse and
+// at the soma
+
+proc EPSP_parameters() {
+	tstop=100
+	sprint(str_tstop,"tstop = %d ms",tstop)
+	NUM=1
+	STRT=0    	 // input start time
+	NOISE=0   	 // noise level
+	INTRVL=10*tstop	 // inter-spike average interval (big number)
+	WEIGHT = 0.001 // by default synapse has a 1 nS conductance
+}
+
+proc EPSP_stim() {
+	sprint(cmd,"access %s",ORIGIN_NAME)
+	execute(cmd) // all NetStims attached logically to soma (it doesn't matter where you put them)
+	objref source,trvl_syn
+	source=new NetStim(0.5)
+	source.number=NUM
+	source.start=STRT
+	source.interval=INTRVL
+	source.noise=NOISE
+	trvl_syn=new Exp2Syn(0.5)
+	trvl_syn.tau1=SYNTAU1
+	trvl_syn.tau2=SYNTAU2
+	trvl_syn.e=SYNE
+	syn=new NetCon(source,trvl_syn,0.9,0,WEIGHT)
+}
+
+proc EPSP_recvec_initial() { local loc
+	EPSP_time=new Vector()
+	EPSP_time.indgen(STRT,tstop+dt,dt) // record only from start of EPSP
+}
+
+proc EPSP_recvec() { local loc
+	EPSPrec=new Vector(EPSP_time.size)
+	loc=logsyn.loc
+	EPSPrec.record(&logsyn.sec.sec.v(loc),EPSP_time)
+	sEPSPrec=new Vector(EPSP_time.size)
+	sprint(cmd,"sEPSPrec.record(&%s.v(0.5),EPSP_time)",ORIGIN_NAME)
+	execute(cmd)
+}
+
+proc EPSP_undo(){
+	objref EPSP_time
+	objref EPSPrec
+	objref sEPSPrec
+	objref syn
+	objref logsyn
+	objref source
+	objref trvl_syn
+}
+proc EPSP_begin_simulation() { local i,enable,variant
+	// variant: 1=all SF=1; 2=current SF profile
+	variant=$1
+	enable=SCALE_ENABLE
+	SCALE_ENABLE=0
+	set_SCALE_ENABLE(1)
+	EPSP_stim()
+	EPSP_recvec_initial()
+	for i=0,NLOGSYNS-1 {
+		logsyn=logsynlist.object(i)
+	 	sprint(str_status,"Running EPSP syn %d/%d",i+1,NLOGSYNS)
+		logsyn.sec.sec trvl_syn.loc(logsyn.loc)
+		EPSP_recvec()
+		if (variant==2) {
+			reclist.object(1).read_record() // read SFs (which get reset at beginning of simulation)
+			syn.weight = logsyn.syn.Egmax * WEIGHT
+		}
+	 	shape_plot.point_mark(trvl_syn, 7)
+	 	my_run()
+		if (variant==1) {
+			logsyn.EPSPrec=new Vector()
+		 	logsyn.EPSPrec.copy(EPSPrec)
+		 	logsyn.sEPSPrec=new Vector()
+		 	logsyn.sEPSPrec.copy(sEPSPrec)
+		} else if (variant==2) {
+			logsyn.post_EPSPrec=new Vector()
+			logsyn.post_EPSPrec.copy(EPSPrec)
+			logsyn.post_sEPSPrec=new Vector()
+			logsyn.post_sEPSPrec.copy(sEPSPrec)
+		}
+	}
+	SCALE_ENABLE=enable
+	set_SCALE_ENABLE(1)
+	if (variant==1) {
+		write_EPSP_records(EPSPrec.size(),dt,STRT)
+	 } else if (variant==2) {
+		write_EPSP_after_records(EPSPrec.size(),dt,STRT)
+	 }
+	 reset_records()
+	 str_status="Ready"
+}
+
+ 

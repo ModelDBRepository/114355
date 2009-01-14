@@ -1,0 +1,273 @@
+// object references
+// =================
+
+// general
+// -------
+strdef cmd						// execute() command
+strdef strng
+objref p0,p1,d,g,imp,file,temp_list,p,yvec,srt,avg_up,avg_down,temp_vec	// used in extra/potentiation.hoc
+
+// defaults.hoc
+// --------------
+strdef CELL
+
+// axon.hoc
+// --------
+objref axon_hill_iseg_section_list
+objref axon_myelin_section_list
+objref axon_node_section_list
+
+// cell.hoc
+// --------
+objref morphlist
+objref chanlist
+objref layoutlist
+objref MORPH
+objref LAYOUT
+objref subtree,channel,param
+objref pfile
+
+objref dendrite_section_list 	// a SectionList of all dendrite sections
+objref dendrite_basal_section_list 	// a SectionList of all dendrite sections
+objref dendrite_apical_section_list 	// a SectionList of all dendrite sections
+objref dendrite_apical_trunk_section_list
+objref dendrite_apical_obliques_section_list
+objref dendrite_apical_oblique_section_list
+objref soma_section_list		// a SectionList of all soma sections
+objref axon_section_list		// a SectionList of all axon sections
+objref cellfile
+objref oblique_section_list
+objref secref
+objref tcs // trunk_connection_section
+objref tcl // trunk_connection_location
+objref tcd // trunk_connection_distance
+objref child_list
+objref temp_section_list
+objref str
+objref ch1box,ch2box
+objref SPIKE	// spike detector Spike.mod
+objref selsec
+objref subtree, parent_subtree
+objref selsec_list, selsec_section_list, selsec_subtree_list
+objref selsecbox, selsecparambox, selsec_file
+objref secL, secLsorti
+objref leafsec_section_list
+
+strdef str_selsec
+strdef cellfilename
+strdef cmd1
+strdef ORIGIN_NAME
+strdef celldir
+strdef sys
+strdef selsec_filename
+
+// sections.hoc
+// ------------
+objref root_list					// an ordinary SectionList of the root sections
+objref branch					// reference to a candidate branch
+// *** also in: plots.hoc
+objref BRANCH
+objref LOGSYN
+objref browser_logsynlist
+
+objref nodelist					// list of Nodes
+objref sec						// regular section
+objref node						// reference to Node
+// *** also in: synapses.hoc
+objref rnode					// root Node
+objref cnode					// child Node
+objref tree						// Tree
+
+objref x0,x1,x2,x12,xtmp
+strdef SLCT_LOGSYN_name
+
+// synapses.hoc
+// ------------
+objref distriblist
+objref DISTRIB
+objref logsyn  					// reference to a LogicalSynapse
+// *** also in: plots.hoc; artificial_vivo.hoc; BPAP.hoc; EPSP.hoc
+objref logsynlist				// list of the LogicalSynapses assigned
+objref randgmax				// random number generator for initial random sf value
+objref SUBG,subg
+objref subgbox
+objref subg_file
+objref subg_list,subg_logsyn_list
+objref gmax_copy					// a copy of the SF profile at the time 'SF copy' was pressed
+objref synbox
+objref sclbox
+objref stdpbox
+strdef str_GMAX0
+strdef str_subg
+strdef strng
+strdef range_name
+strdef str_scaling_type, str_scaling_copy
+strdef subg_filename
+
+// records.hoc
+// -----------
+objref reclist		   		   // list of ResultRecords
+objref rcrd					   // reference to a specific ResultRecord
+
+// configurations.hoc
+// -----------------
+objref RIP					   // reference to the current Configuration
+objref RDP					   // 
+objref RIPp					   // reference to a Configuration within a loop
+objref RDPp
+objref RIP_list				   // the list of the RIP configurations for a given cell
+objref browser_RIP_list		   // a list of the current RIP names (for the browser)
+objref browser_RDP_list		   // a list of the current RIP RDP namess (for the browser)
+objref cfg_file				   // file where RIP_list is saved
+objref tmpvec
+objref tmplist
+objref RDPparamlist
+objref RIPparamlist
+objref prm
+
+strdef cfg_filename
+strdef cell_suffix
+strdef record, assign
+
+// plots.hoc
+// ---------
+objref plotterlist			   // list of Plotters (Graph templates)
+objref plotter				   // reference to a Plotter
+objref shape_plot			   // reference to a Shape
+objref shape_plot_export
+objref psfile
+objref psgraph
+objref seclist
+
+strdef psfilename
+
+// control.hoc
+// -----------
+objref cellbox
+objref cl1box
+objref cl2box
+objref cl3box
+objref cl4box
+objref cl5box
+objref cl6box
+
+objref ctrlbox
+objref prmbox
+objref shpbox
+objref rtbox,rt1box
+objref grfbox
+objref genbox
+
+objref rdpbox
+objref ridbox
+objref cllbox
+objref mchbox
+objref simbox
+objref selbox,sl1box,sl2box
+objref tstbox
+objref sclbox
+objref ripbox
+objref cfgbox
+objref cpmbox
+objref smsbox
+objref sm1box,sm2box, sm3box
+objref ext1box
+objref isibox
+
+objref dbox
+
+strdef lbl,str_synimp, str_RDP, str_RIP
+
+// synapse distribution
+// ====================
+// distance
+// --------
+objref dist_vec
+objref sorted_indx
+objref comp_list
+objref temp_comp_list
+objref comp,next_comp
+
+// simulations
+// ===========
+objref prtcllist		  		   // list of all simulation protocols
+objref simlist
+objref vivbox
+objref inpbox, inp1box, inp2box
+strdef str_MAVGstart, str_VRECtime
+// artificial_vivo.hoc
+// -------------------
+objref syn,ncrec[1],ncstim[1],nil
+objref source,rnd,seeder  		   // reference to NetStim
+// *** also in: EPSP.hoc
+objref sourcelist			   // list of NetStims so that NetCon can work
+//objref syn					   // reference to NetCon representing an actual synapse
+objref synlist				   // list of NetCons
+// *** also in: EPSP.hoc
+objref r1,r2				   // random number generators
+objref rand,rand0,intrvl_rand
+objref v0rec				   // record of voltage at soma
+objref recspikes			   // record of spike times
+objref apc					   // reference to APCount														 
+objref vivo_time			   // index vector with the record times
+objref vivo0_time			   // index vector with the record times
+objref vivo_gmax_time
+objref mavg_time
+
+strdef str_tstop
+strdef str_status
+strdef str_vivo_mode
+strdef str_RECdt
+strdef str_WINDOWstart
+strdef str_input
+
+// BPAP.hoc
+// --------
+objref imp 					   // reference to IClamp
+objref BPAP_time			   // index vector with the record times
+objref APrec				   // record of AP voltage as measured at soma
+
+// EPSP.hoc
+// --------
+objref EPSP_time			   // index vector with the record times
+objref EPSPrec				   // record of EPSP at a synapse
+objref sEPSPrec				   // record of EPSP as measured at soma for a given synapse
+objref trvl_syn				   // tarveling synapse
+
+// EPSC.hoc
+// --------
+objref vclmp
+objref sEPSCrec
+objref EPSC_time
+
+// EPSP_check.hoc
+// --------------
+objref check_EPSPrec
+objref check_sEPSPrec
+objref check_input
+objref check_timing
+objref g
+
+// BPAP_check.hoc
+// --------------
+objref check_BPAPrec
+objref check_sBPAPrec
+objref bbox
+strdef str_statistics1
+strdef str_statistics2
+
+// resistance.hoc
+// --------------
+objref res
+
+// 2 points
+// --------
+objref logsyn1,logsyn2
+objref trvl_syn1,trvl_syn2
+
+// I-F curve
+// ---------
+objref Ivec
+objref Fvec
+
+

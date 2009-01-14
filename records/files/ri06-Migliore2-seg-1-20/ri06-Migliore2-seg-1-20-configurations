@@ -1,0 +1,5 @@
+NRIPS = 1
+
+RIP 0 ( 0 )
+nRDPs = 6
+RDP 0 ( 1 )	RDP 1 ( 1 )	RDP 2 ( 1 )	RDP 3 ( 1 )	RDP 4 ( 1 )	RDP 5 ( 1 )	

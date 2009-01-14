@@ -1,0 +1,15 @@
+/* simple cable */
+
+create soma
+soma {
+	L = 1
+	diam = 2
+}
+
+create dend
+dend {
+	L = 100
+	diam = 2.1428571	// this will make L = 0.1lambda (with Rm = 28000; Ra = 150)
+}
+
+connect dend(0),soma(0.5)

@@ -1,0 +1,25 @@
+// Uses NEURON's built in Impedance class to compute input resistance at each logsyn
+
+proc resistance_parameters() {
+}
+
+proc resistance_undo(){
+	 objref res
+	 objref logsyn
+}
+
+proc resistance_begin_simulation() { local i
+	res=new Impedance()
+	str_status="Running Resistance"
+	for i=0,NLOGSYNS-1 {
+		logsyn=logsynlist.object(i)
+		logsyn.sec.sec {
+			res.loc(logsyn.loc)
+			res.compute(0)
+			logsyn.resistance=res.input(logsyn.loc)
+		}
+	}
+	str_status="Ready"
+}
+
+ 

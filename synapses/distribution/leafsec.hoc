@@ -1,0 +1,32 @@
+// insert 1 synapse in each regular segment
+// and 1 synapse every SYNINT leafsec segments
+
+proc synlocate() { local i, id, loc, cnt
+	objref node
+	NSYNS=0
+	NLOGSYNS=0
+	objref logsyn,logsynlist
+	logsynlist=new List()	// list of Synapse objects
+	browser_logsynlist=new List()
+	id = 0
+	for i = 0, dNSEC-1 {
+		node=nodelist.object(i)
+		cnt = 0
+		node.sec.sec {
+			for (loc,0) {
+				if ((node.long_leafsec && (cnt/SYNINT == int(cnt/SYNINT))) || !node.long_leafsec) {
+					logsyn=new Logical_Synapse(node,distance(loc),loc,id)
+					logsyn.syn=new ScalExp2Syn(loc) // add a new synapse at location
+					logsynlist.append(logsyn)
+					node.logsynlist.append(logsyn)
+					node.update_branches(logsyn) // update branch synloglist
+					NLOGSYNS += 1
+					id += 1
+				}
+				cnt += 1
+			}
+		}	
+	}
+	NSYNS = NLOGSYNS
+	LOGSYN=BRANCH.logsynlist.object(SLCT_LOGSYN)
+}

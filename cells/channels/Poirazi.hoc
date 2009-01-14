@@ -1,0 +1,452 @@
+// Channel layout from Poirazi, Brannon and Mel (2001) 
+// ===============================================================================
+
+// parameters
+// ----------
+
+v_init=-70
+
+celsius = 34
+
+RmSoma = 200000 // ohmcm2
+RaSoma = 50 // ohmcm
+CmSoma = 1
+
+ENa = 50
+EK = -80
+ECa = 140
+El = -70 // calculated so that Vrest=-70 everywhere !!!
+
+// ===============================================================================
+
+// variable defaults
+// -----------------
+
+// section and location of holding point 157 microns from soma (determines conductances for oblique branches)
+objref hold_sec,prev_hold_sec
+objref hold_sec1
+objref hold_sec2
+
+func find_max() { local dx,max
+	 max=0
+	 forsec dendrite_apical_trunk_section_list {
+	 	for (x) {
+			dx=vdist_co(x)
+			if (dx>max) { max=dx }
+		}
+	 }
+	 return max
+}
+proc find_hold() { local hold_dist,dx,prev_dx,prev_hold_loc
+	 hold_dist=$1
+	 hold_loc=0
+	 prev_hold_loc=0
+	 dx=0
+	 prev_dx=0
+	 forsec dendrite_apical_trunk_section_list {
+	 	for (x) {
+			dx=vdist_co(x)
+			if (prev_dx>-1) {
+			   if (dx>hold_dist) {
+			   	  if (dx-hold_dist>hold_dist-prev_dx) {
+				  	 hold_sec=new SectionRef()
+					 hold_loc=x
+				  } else {
+				  	 hold_sec=prev_hold_sec
+					 hold_loc=prev_hold_loc
+				  }
+				  prev_dx=-1 // after passing hold_dist, no need to check any more 
+			    } else {
+				   prev_hold_sec=new SectionRef()
+				   prev_hold_loc=x
+				   prev_dx=dx
+				}
+			}
+		}
+	}
+}
+
+
+max_trunk_dist=find_max() // distance of farthest point on the trunk
+find_hold(157)
+hold_sec.sec hold_sec1=new SectionRef()
+hold_loc1=hold_loc
+find_hold(50)
+hold_sec.sec hold_sec2=new SectionRef()
+hold_loc2=hold_loc
+tmp=0
+dx=0
+
+// conductance in mho/cm2
+// ----------------------
+// soma
+SGNa = 7/1000
+SNaATT = 1 // 1=no slow attenuation of the sodium current (0=maximum slow attenuation)
+SGKdr = 1.4/1000
+SDND = 0 // flag: 0=not a dendritic section; 1=a dendritic section
+SGKA = 7.5/1000
+SGNah = 7.8/1000
+SGCaT = 0.05/1000
+SGCaR = 3/1000
+SGCaL = 7/1000
+SGAHPs = 0.5/1000
+SGAHPm = 82.5/1000
+SGKm = 60/1000
+
+// apical trunk
+DaTGNa = 7/1000
+DaTNaATT = 0 // 0=slow attenuation of the sodium current (1=no slow attenuation)
+DaTGKdr = 0.867/1000
+DaTDND = 1 // flag: 0=not a dendritic section; 1=a dendritic section
+DaTGKAp = 7.5/1000
+DaTGKAd = 7.2/1000
+DaTGNah = 7.8/1000
+DaTGCaT = 0.1/1000
+DaTGCaR = 0.03/1000
+DaTGCaL = 0.333/1000
+DaTGAHPs = 0.1/1000
+DaTGAHPm = 15/1000
+DaTGKm = 60/1000
+
+// apical oblique branches
+DaOGNa = 7/1000
+DaONaATT = DaTNaATT // not used
+DaOGKdr = 0.867/1000
+DaODND = 1 // flag: 0=not a dendritic section; 1=a dendritic section
+DaOGKAd = DaTGKAd // not used
+DaOGNah = DaTGNah // not used
+DaOGCaT = DaTGCaT // not used
+DaOGCaR = DaTGCaR // not used
+DaOGCaL = DaTGCaL // not used
+DaOGAHPs = DaTGAHPs // not used
+DaOGAHPm = DaTGAHPm // not used
+
+DaOGKm = 120/1000
+DaOGNap = 2.8/1000
+
+// basal tree
+DbGNa = 7/1000
+DbGKdr = 0.867/1000
+DbDND = 1 // flag: 0=not a dendritic section; 1=a dendritic section
+DbGKAp = DaTGKAp // not used
+DbGKAd = DaTGKAd // not used
+DbGNah = SGNah
+
+// axon
+AxGNa = 10/1000
+AxGKdr = 2/1000
+AxDND = 0 // flag: 0=not a dendritic section; 1=a dendritic section
+
+// ===============================================================================
+// user access flag; conductance parameter flag; [gui name]; [variable name];
+// ([] - if user access flag==1)
+// variable value; range distribution formula
+
+
+// Soma
+//////////////////////////////////////////////////////////////////////////////////////////
+
+subtree = new Subtree("Soma",soma_section_list)
+	channel = new Channel("hha2_P")
+		channel.add_parameter(new Channel_Parameter(0,0,"gl_hha2_P",1/RmSoma,"gl_hha2_P=1/RmSoma"))
+		channel.add_parameter(new Channel_Parameter(1,1,"gnabar_hha2_P","g Na+ (fast)","SGNa",SGNa,"gnabar_hha2_P=SGNa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ar2_hha2_P",SNaATT,"ar2_hha2_P=SNaATT"))
+		channel.add_parameter(new Channel_Parameter(1,1,"gkbar_hha2_P","g K+ (dr)","SGKdr",SGKdr,"gkbar_hha2_P=SGKdr"))
+		channel.add_parameter(new Channel_Parameter(0,0,"dend_hha2_P",SDND,"dend_hha2_P=SDND"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",ENa,"ena=ENa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+		channel.add_parameter(new Channel_Parameter(0,0,"el_hha2_P",El,"el_hha2_P=El"))
+		channel.add_parameter(new Channel_Parameter(0,0,"Ra",RaSoma,"Ra=RaSoma"))
+		channel.add_parameter(new Channel_Parameter(0,0,"cm",CmSoma,"cm=CmSoma"))
+	subtree.add_channel(channel)	
+	channel = new Channel("kap_P")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkabar_kap_P","g K+ (Ap)","SGKA",SGKA,"gkabar_kap_P=SGKA"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)	
+	channel = new Channel("h_P")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_h_P","g Na+ (h)","SGNah",SGNah,"gbar_h_P=SGNah"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",ENa,"ena=ENa"))
+	subtree.add_channel(channel)	
+	channel = new Channel("cat_P")
+		channel.add_parameter(new Channel_Parameter(1,1,"gcatbar_cat_P","g Ca++ (T)","SGCaT",SGCaT,"gcatbar_cat_P=SGCaT"))
+		channel.add_parameter(new Channel_Parameter(0,0,"eca",ECa,"eca=ECa"))
+	subtree.add_channel(channel)	
+	channel = new Channel("somacar_P")
+		channel.add_parameter(new Channel_Parameter(1,1,"gcabar_somacar_P","g Ca++ (R)","SGCaR",SGCaR,"gcabar_somacar_P=SGCaR"))
+		channel.add_parameter(new Channel_Parameter(0,0,"eca",ECa,"eca=ECa"))
+	subtree.add_channel(channel)	
+	channel = new Channel("cal_P")
+		channel.add_parameter(new Channel_Parameter(1,1,"gcalbar_cal_P","g Ca++ (L)","SGCaL",SGCaL,"gcalbar_cal_P=SGCaL"))
+		channel.add_parameter(new Channel_Parameter(0,0,"eca",ECa,"eca=ECa"))
+	subtree.add_channel(channel)	
+	channel = new Channel("cad_P")
+	subtree.add_channel(channel)	
+	channel = new Channel("kca_P")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_kca_P","g K+ (AHPs)","SGAHPs",SGAHPs,"gbar_kca_P=SGAHPs"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)	
+	channel = new Channel("mykca_P")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkbar_mykca_P","g K+ (AHPm)","SGAHPm",SGAHPm,"gkbar_mykca_P=SGAHPm"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)	
+	channel = new Channel("km_P")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_km_P","g K+ (m)","SGKm",SGKm,"gbar_km_P=SGKm"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)	
+LAYOUT.add_subtree(subtree)
+
+// Apical Trunk
+//////////////////////////////////////////////////////////////////////////////////////////
+// ----------------------------------------------------------------------------------------
+// procedures for distance-dependednt assignments
+proc apical_gl_hha2_P_x() {
+	 for (x) {
+	 	 dx=vdist_co(x)
+		 gl_hha2_P(x)=(1+exp((200-dx)/50))/(RmSoma*exp((200-dx)/50)+5000)
+	 }
+}
+proc apical_ar2_hha2_P_x() {
+	 for (x) { dx=vdist_co(x) ar2_hha2_P(x)=1-dx/max_trunk_dist }
+}
+proc apical_gkabar_kap_P_x() {
+	 for (x) {
+	 	 dx=vdist_co(x)
+		 if (dx<=100) {	gkabar_kap_P(x)=DaTGKAp
+		 } else { gkabar_kap_P(x)=0 }
+	 }
+}
+proc apical_gkabar_kad_P_x() {
+	 for (x) {
+	 	 dx=vdist_co(x)
+		 if (dx<=100) {	gkabar_kad_P(x)=0
+		 } else { if (dx<=350) { gkabar_kad_P(x)=DaTGKAd*8*dx/350
+		 } else { gkabar_kad_P(x)=DaTGKAd*8 }}
+	 }
+}
+proc apical_gbar_h_P_x() {
+	 for (x) {
+	 	 dx=vdist_co(x)
+		 gbar_h_P(x)=DaTGNah+(9*DaTGNah-DaTGNah)/(1+exp((280-dx)/50))
+	 }
+}
+proc apical_gcatbar_cat_P_x() {
+	 for (x) {
+	 	 dx=vdist_co(x)
+		 if (dx<100) { gcatbar_cat_P(x)=0
+		 } else { gcatbar_cat_P(x)=DaTGCaT*4*dx/350 }
+	 }
+}
+proc apical_gcalbar_calH_P_x() {
+	 for (x) {
+	 	 dx=vdist_co(x)
+		 if (dx<50) { gcalbar_calH_P(x)=0.1*DaTGCaL
+		 } else { gcalbar_calH_P(x)=4.6*DaTGCaL }
+	 }
+}
+proc apical_gbar_kca_P_x() {
+	 for (x) {
+	 	 dx=vdist_co(x)
+		 if (dx>50 && dx<200) { gbar_kca_P(x)=5*DaTGAHPs
+		 } else { gbar_kca_P(x)=0.5*DaTGAHPs }
+	 }
+}
+proc apical_gkbar_mykca_P_x() {
+	 for (x) {
+	 	 dx=vdist_co(x)
+		 if (dx>50 && dx<200) { gkbar_mykca_P(x)=2*DaTGAHPm
+		 } else { gkbar_mykca_P(x)=0.25*DaTGAHPm }
+	 }
+}
+// ----------------------------------------------------------------------------------------
+subtree = new Subtree("Apical Trunk",dendrite_apical_trunk_section_list)
+	channel = new Channel("hha2_P")
+		channel.add_parameter(new Channel_Parameter(0,0,"gl_hha2_P",1/RmSoma,"apical_gl_hha2_P_x()"))
+		channel.add_parameter(new Channel_Parameter(1,1,"gnabar_hha2_P","g Na+ (fast)","DaTGNa",DaTGNa,"gnabar_hha2_P=DaTGNa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ar2_hha2_P",DaTNaATT,"apical_ar2_hha2_P_x()"))
+		channel.add_parameter(new Channel_Parameter(1,1,"gkbar_hha2_P","g K+ (dr)","DaTGKdr",DaTGKdr,"gkbar_hha2_P=DaTGKdr"))
+		channel.add_parameter(new Channel_Parameter(0,0,"dend_hha2_P",DaTDND,"dend_hha2_P=DaTDND"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",ENa,"ena=ENa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+		channel.add_parameter(new Channel_Parameter(0,0,"el_hha2_P",El,"el_hha2_P=El"))
+		channel.add_parameter(new Channel_Parameter(0,0,"Ra",RaSoma,"Ra=RaSoma"))
+		channel.add_parameter(new Channel_Parameter(0,0,"cm",CmSoma,"cm=CmSoma"))
+	subtree.add_channel(channel)	
+	channel = new Channel("kap_P")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkabar_kap_P","g K+ (Ap)","DaTGKAp",DaTGKAp,"apical_gkabar_kap_P_x()"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)	
+	channel = new Channel("kad_P")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkabar_kad_P","g K+ (Ad)","DaTGKAd",DaTGKAd,"apical_gkabar_kad_P_x()"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)	
+	channel = new Channel("h_P")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_h_P","g Na+ (h)","DaTGNah",DaTGNah,"apical_gbar_h_P_x()"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",ENa,"ena=ENa"))
+	subtree.add_channel(channel)	
+	channel = new Channel("cat_P")
+		channel.add_parameter(new Channel_Parameter(1,1,"gcatbar_cat_P","g Ca++ (T)","DaTGCaT",DaTGCaT,"apical_gcatbar_cat_P_x()"))
+		channel.add_parameter(new Channel_Parameter(0,0,"eca",ECa,"eca=ECa"))
+	subtree.add_channel(channel)	
+	channel = new Channel("car_P")
+		channel.add_parameter(new Channel_Parameter(1,1,"gcabar_car_P","g Ca++ (R)","DaTGCaR",DaTGCaR,"gcabar_car_P=DaTGCaR"))
+		channel.add_parameter(new Channel_Parameter(0,0,"eca",ECa,"eca=ECa"))
+	subtree.add_channel(channel)	
+	channel = new Channel("calH_P")
+		channel.add_parameter(new Channel_Parameter(1,1,"gcalbar_calH_P","g Ca++ (L)","DaTGCaL",DaTGCaL,"apical_gcalbar_calH_P_x()"))
+		channel.add_parameter(new Channel_Parameter(0,0,"eca",ECa,"eca=ECa"))
+	subtree.add_channel(channel)	
+	channel = new Channel("cad_P")
+	subtree.add_channel(channel)	
+	channel = new Channel("kca_P")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_kca_P","g K+ (AHPs)","DaTGAHPs",DaTGAHPs,"apical_gbar_kca_P_x()"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)	
+	channel = new Channel("mykca_P")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkbar_mykca_P","g K+ (AHPm)","DaTGAHPm",DaTGAHPm,"apical_gkbar_mykca_P_x()"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)	
+	channel = new Channel("km_P")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_km_P","g K+ (m)","DaTGKm",DaTGKm,"gbar_km_P=DaTGKm"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)	
+LAYOUT.add_subtree(subtree)
+ 
+// Oblique apical branches
+//////////////////////////////////////////////////////////////////////////////////////////
+objref last_oblique
+last_oblique=new SectionList()
+ok=1
+forsec dendrite_apical_obliques_section_list { secref=new SectionRef() }
+secref.sec last_oblique.append()
+// ----------------------------------------------------------------------------------------
+// procedure for distance-dependednt assignments
+proc oblique_x() { local n,loc
+	 a=$1
+	 b=$2
+	 secref=new SectionRef()
+	 ifsec last_oblique { // run this loop only for the last section (since it updates all sections)
+	 	n=0
+	 	forsec dendrite_apical_obliques_section_list {
+	 		for (x) {
+				dx=vdist_co(x)
+				if (distance(x)-tcd.x(n)<=50) {
+				   sprint(cmd,"tcs.object(%d).sec tmp=%s(%g)",n,param.param_name,tcl.x(n))
+				   execute(cmd)
+				   sprint(cmd,"%s(x)=tmp",param.param_name)
+				   execute(cmd)
+				} else {
+				   sprint(cmd,"hold_sec1.sec tmp=%s(hold_loc1)",param.param_name) // parameter value at holding point on trunk
+				   execute(cmd)
+			   	   if (dx<300) {
+				   	  sprint(cmd,"%s(x)=tmp",param.param_name)
+					  execute(cmd)
+				   } else {
+				   	  sprint(cmd,"%s(x)=a*tmp+b",param.param_name)
+					  execute(cmd)
+				   }
+				}
+			}		
+	 		n+=1
+	 	} 
+	 }
+	 access secref.sec
+}
+// ----------------------------------------------------------------------------------------
+subtree = new Subtree("Apical Oblique Branches",dendrite_apical_obliques_section_list)
+	channel = new Channel("hha2_P")
+		channel.add_parameter(new Channel_Parameter(0,0,"gl_hha2_P",1/RmSoma,"oblique_x(1,0)")) // no specification of leak beyond 300
+		channel.add_parameter(new Channel_Parameter(1,1,"gnabar_hha2_P","g Na+ (fast)","DaOGNa",DaOGNa,"gnabar_hha2_P=DaOGNa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ar2_hha2_P",DaONaATT,"oblique_x(0,0.95)"))
+		channel.add_parameter(new Channel_Parameter(1,1,"gkbar_hha2_P","g K+ (dr)","DaOGKdr",DaOGKdr,"gkbar_hha2_P=DaOGKdr"))
+		channel.add_parameter(new Channel_Parameter(0,0,"dend_hha2_P",DaODND,"dend_hha2_P=DaODND"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",ENa,"ena=ENa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+		channel.add_parameter(new Channel_Parameter(0,0,"el_hha2_P",El,"el_hha2_P=El"))
+		channel.add_parameter(new Channel_Parameter(0,0,"Ra",RaSoma,"Ra=RaSoma"))
+		channel.add_parameter(new Channel_Parameter(0,0,"cm",CmSoma,"cm=CmSoma"))
+	subtree.add_channel(channel)	
+	channel = new Channel("kad_P")
+		channel.add_parameter(new Channel_Parameter(0,1,"gkabar_kad_P",DaOGKAd,"oblique_x(1.9,0)"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)	
+	channel = new Channel("h_P")
+		channel.add_parameter(new Channel_Parameter(0,1,"gbar_h_P",DaOGNah,"oblique_x(1,0)")) // no specification beyond 300 microns
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",ENa,"ena=ENa"))
+	subtree.add_channel(channel)	
+	channel = new Channel("cat_P")
+		channel.add_parameter(new Channel_Parameter(0,1,"gcatbar_cat_P",DaOGCaT,"oblique_x(1,0)")) // no specification beyond 300 microns
+		channel.add_parameter(new Channel_Parameter(0,0,"eca",ECa,"eca=ECa"))
+	subtree.add_channel(channel)	
+	channel = new Channel("car_P")
+		channel.add_parameter(new Channel_Parameter(0,1,"gcabar_car_P",DaOGCaR,"oblique_x(13,0)"))
+		channel.add_parameter(new Channel_Parameter(0,0,"eca",ECa,"eca=ECa"))
+	subtree.add_channel(channel)	
+	channel = new Channel("calH_P")
+		channel.add_parameter(new Channel_Parameter(0,1,"gcalbar_calH_P",DaOGCaL,"oblique_x(14,0)"))
+		channel.add_parameter(new Channel_Parameter(0,0,"eca",ECa,"eca=ECa"))
+	subtree.add_channel(channel)	
+	channel = new Channel("cad_P")
+	subtree.add_channel(channel)	
+	channel = new Channel("kca_P")
+		channel.add_parameter(new Channel_Parameter(0,1,"gbar_kca_P",DaOGAHPs,"oblique_x(0,5*DaOGAHPs)")) // it says ginit and not ghold
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)	
+	channel = new Channel("mykca_P")
+		channel.add_parameter(new Channel_Parameter(0,1,"gkbar_mykca_P",DaOGAHPm,"oblique_x(1,0)")) // no specification
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)	
+	channel = new Channel("km_P")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_km_P","g K+ (m)","DaOGKm",DaOGKm,"gbar_km_P=DaOGKm"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)	
+	channel = new Channel("nap_P")
+		channel.add_parameter(new Channel_Parameter(1,1,"gnabar_nap_P","g Na+ (p)","DaOGNap",DaOGNap,"gnabar_nap_P=DaOGNap"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)	
+LAYOUT.add_subtree(subtree)
+
+// Basal tree
+//////////////////////////////////////////////////////////////////////////////////////////
+subtree = new Subtree("Basal Dendrite",dendrite_basal_section_list)
+	channel = new Channel("hha2_P")
+		channel.add_parameter(new Channel_Parameter(0,0,"gl_hha2_P",1/RmSoma,"hold_sec2.sec { tmp=gl_hha2_P(hold_loc2) } gl_hha2_P=tmp"))
+		channel.add_parameter(new Channel_Parameter(1,1,"gnabar_hha2_P","g Na+ (fast)","DbGNa",DbGNa,"gnabar_hha2_P=DbGNa"))
+		channel.add_parameter(new Channel_Parameter(1,1,"gkbar_hha2_P","g K+ (dr)","DbGKdr",DbGKdr,"gkbar_hha2_P=DbGKdr"))
+		channel.add_parameter(new Channel_Parameter(0,0,"dend_hha2_P",DbDND,"dend_hha2_P=DbDND"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",ENa,"ena=ENa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek_P",EK,"ek=EK"))
+		channel.add_parameter(new Channel_Parameter(0,0,"el_hha2_P",El,"el_hha2_P=El"))
+		channel.add_parameter(new Channel_Parameter(0,0,"Ra",RaSoma,"Ra=RaSoma"))
+		channel.add_parameter(new Channel_Parameter(0,0,"cm",CmSoma,"cm=CmSoma"))
+	subtree.add_channel(channel)	
+	channel = new Channel("kap_P")
+		channel.add_parameter(new Channel_Parameter(0,1,"gkabar_kap_P",DbGKAp,"hold_sec2.sec { tmp=gkabar_kap_P(hold_loc2) } gkabar_kap_P=1.6*tmp"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)	
+	channel = new Channel("kad_P")
+		channel.add_parameter(new Channel_Parameter(0,1,"gkabar_kad_P",DbGKAd,"hold_sec2.sec { tmp=gkabar_kad_P(hold_loc2) } gkabar_kad_P=1.6*tmp"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)	
+	channel = new Channel("h_P")
+		channel.add_parameter(new Channel_Parameter(0,1,"gbar_h_P",DbGNah,"gbar_h_P=DbGNah"))
+		channel.add_parameter(new Channel_Parameter(0,0,"na",ENa,"ena=ENa"))
+	subtree.add_channel(channel)	
+LAYOUT.add_subtree(subtree)
+
+// Axon
+//////////////////////////////////////////////////////////////////////////////////////////
+subtree = new Subtree("Axon",axon_section_list)
+	channel = new Channel("hha2_P")
+		channel.add_parameter(new Channel_Parameter(0,0,"gl_hha2_P",1/RmSoma,"gl_hha2_P=1/RmSoma"))
+		channel.add_parameter(new Channel_Parameter(1,1,"gnabar_hha2_P","g Na+ (fast)","AxGNa",AxGNa,"gnabar_hha2_P=AxGNa"))
+		channel.add_parameter(new Channel_Parameter(1,1,"gkbar_hha2_P","g K+ (dr)","AxGKdr",AxGKdr,"gkbar_hha2_P=AxGKdr"))
+		channel.add_parameter(new Channel_Parameter(0,0,"dend_hha2_P",AxDND,"dend_hha2_P=AxDND"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",ENa,"ena=ENa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+		channel.add_parameter(new Channel_Parameter(0,0,"el_hha2_P",El,"el_hha2_P=El"))
+		channel.add_parameter(new Channel_Parameter(0,0,"Ra",RaSoma,"Ra=RaSoma"))
+		channel.add_parameter(new Channel_Parameter(0,0,"cm",CmSoma,"cm=CmSoma"))
+	subtree.add_channel(channel)	
+LAYOUT.add_subtree(subtree)
+
+// --------------------------------------------------------------------------------------

@@ -1,0 +1,614 @@
+objref v1, v2, V1, V2
+objref crr, dtcrr, g
+
+// compute for the indicated logsyn id, the transfer function with every other synapse normalized to its input ressitance and present it in logsyn.range
+proc syn_transfer() { local id, i, lcl
+	id = $1
+	logsyn = logsynlist.object(id)
+	objref imp
+	imp=new Impedance()
+	logsyn.sec.sec {
+		imp.loc(logsyn.loc)
+		imp.compute(0)
+		lcl=imp.input(logsyn.loc)
+	}
+	for i = 0, NLOGSYNS-1 {
+		logsyn=logsynlist.object(i)
+		logsyn.sec.sec logsyn.range=imp.transfer(logsyn.loc)/lcl
+	}
+}
+
+// for each location sum normalized transfer to all other locations
+proc dend_transfer() { local id, i, lcl
+	for id = 0, NLOGSYNS - 1 {
+		logsyn = logsynlist.object(id)
+		objref imp
+		imp=new Impedance()
+		logsyn.sec.sec {
+			imp.loc(logsyn.loc)
+			imp.compute(0)
+			lcl=imp.input(logsyn.loc)
+		}
+		logsyn.range = 0
+		for i = 0, NLOGSYNS-1 {
+			logsynlist.object(i).sec.sec logsyn.range += imp.transfer(logsynlist.object(i).loc) * logsynlist.object(i).numsyns
+		}
+		logsyn.range /= (lcl * NSYNS)
+	}
+}
+
+// for each location sum normalized transfer to all other locations
+proc dend_Rin() { local id, i, lcl
+	for id = 0, NLOGSYNS - 1 {
+		logsyn = logsynlist.object(id)
+		objref imp
+		imp=new Impedance()
+		logsyn.sec.sec {
+			imp.loc(logsyn.loc)
+			imp.compute(0)
+			logsyn.range =imp.input(logsyn.loc)
+		}
+	}
+}
+
+
+// FILE cross-correlations for all logsyns
+// =======================================================
+objref crrfile, crrfile2
+strdef crrfilename, crrdir, crrsubdir, crrsys
+// compute the cross-correlations between all sites and save to file
+// specify: inetrval window for cross-correlation and optionally, what logsyn number to start at (if you want to continue from
+// a point you stopped)
+// First choose relevant RIP and RDP
+proc wf_all_corr() { local answer, n, intrvl, start, N, m, id1, id2, check, i
+	dbox=new HBox()
+	answer=1
+	answer=dbox.dialog("Are you sure you want to compute now all cross-correlations and save them?","Yes","Cancel")
+	if (answer) {
+		n = numarg()
+		intrvl = $1
+		m = intrvl / VRECdt
+		sprint(crrdir, "extras/cross_correlations/data/RIP%d-RDP%d-intrvl%d",RIPNUM, RDPNUM, intrvl)
+		sprint(crrsys,"mkdir -p %s",crrdir)
+		system(crrsys)
+		plotter = plotterlist.object(0)
+		plotter.external_export_enable(0)
+		plotter.gtype=0 // change to Vm(t)
+		plotter.ordinate_selection(3)
+		crrfile = new File()
+		start = 0
+		if (n > 1) { start = $2 }
+		for id1 = start, NLOGSYNS - 1 {
+			V1 = logsynlist.object(id1).vrec.c
+			N = V1.size
+			print "RIPNUM", RIPNUM, " RDPNUM ",RDPNUM, " logsyn = ", id1
+			sprint(crrsubdir, "%s/%d",crrdir, id1)
+			sprint(crrsys,"mkdir -p %s",crrsubdir)
+			system(crrsys)
+			for id2 = id1, NLOGSYNS - 1 {
+				V2 = logsynlist.object(id2).vrec.c
+				if (N > m && N == V2.size) {
+					crr = new Vector()
+					v1 = V1.c(0, N-m)
+					for i = 0, m-2 {
+						v2 = V2.c(m-1-i, N-1-i)
+						crr.append(compute_cross_correlation(v1, v2, N, m))
+					}
+					v2 = V2.c(0, N-m)
+					for i = 0, m-1 {
+						v1 = V1.c(i, N-m+i)
+						crr.append(compute_cross_correlation(v1, v2, N, m))
+					}
+					sprint(crrfilename, "%s/%d", crrsubdir, id2)
+					crrfile.wopen(crrfilename)
+					crr.vwrite(crrfile,2)
+	//				crr.printf(crrfile, "%3.2f\n")
+	//				crrfile.printf("%g",0)	// just so the last entry will not be a carriage returen (problem loading it afterwards)
+					crrfile.close()
+				}				
+			}
+		}
+	}
+}
+
+// get the cross-correlation between two locations from a file
+proc rf_corr() { local n, id1, id2, intrvl, color, m, csize, reverse, check, tmp
+	plotter = plotterlist.object(0)
+	n = numarg()
+	id1 = $1
+	id2 = $2
+	intrvl = $3
+	m = intrvl / VRECdt
+	csize = 2*m - 1
+	sprint(crrdir, "extras/cross_correlations/data/RIP%d-RDP%d-intrvl%d", RIPNUM, RDPNUM, intrvl)
+	reverse = 0
+	if (id1 > id2) {
+		tmp = id1
+		id1 = id2
+		id2 = tmp
+		reverse = 1
+	}
+	sprint(crrfilename, "%s/%d/%d", crrdir, id1, id2)
+	crrfile = new File()
+	check = crrfile.ropen(crrfilename)
+	if (check) {
+		crr = new Vector()
+		crr.vread(crrfile)
+		crrfile.close()
+		if (reverse) { crr.reverse() }
+		color = 1
+		if (n == 4) { color = $4 }
+		if (color > 0) {
+			dtcrr = new Vector()
+			dtcrr.indgen((-m+1)*VRECdt, (m-1)*VRECdt, VRECdt)	
+			g = plotter.graph_export
+			plotter.external_keep_lines(1)
+			plotter.external_export_enable(1)
+			plot_corr(color, intrvl)
+			g.size(-intrvl, intrvl, -0.2, 1)
+		}
+	} else {
+		print "Unable to open", crrfilename
+	}
+}
+
+
+// compute for the indicated logsyn id, the peak cross-correlation with every other synapse and present it in logsyn.range
+// optional maximal interval for the peak correlation value (a good correlation should be up to a few ms from zero)
+proc rf_syn_corr() { local n, i, id, intrvl, maxintrvl, indmx
+	plotter = plotterlist.object(0)
+	g = plotter.graph_export
+	n = numarg()
+	id = $1
+	intrvl = $2
+	if (n >2) {
+		maxintrvl = $3
+	} else {
+		maxintrvl = 25	// default
+	}
+	dtcrr = new Vector()
+	dtcrr.indgen(-intrvl+VRECdt, intrvl-VRECdt, VRECdt)
+	for i = 0, NLOGSYNS-1 {
+		logsyn = logsynlist.object(i)
+		rf_corr(id, i, intrvl, -1)	// (don't plot)
+		indmx = crr.max_ind()
+		if (dtcrr.x(indmx) > -maxintrvl && dtcrr.x(indmx) < maxintrvl) {
+			logsyn.range = crr.max
+			plot_corr(1, intrvl)
+		} else {
+			logsyn.range = 0
+			plot_corr(2, intrvl)
+		}
+	}
+}
+
+// ==============================================================
+
+// for each location, average (over NSYNS, not NLOGSYNS) peak cross correlation with all other locations
+// -------------------------------------------------------------------------------------------------------------------------------------
+// specify interval window for cross-correlation and make sure to select the relevant RIP and RDP
+// if a file already exists, data will be read from it, otherwise the peak cross-correlations will be computed and written in a file
+proc rf_dend_corr() { local intrvl, m, id1, id2, reverse, indmx
+	n = numarg()
+	intrvl = $1
+	m = intrvl / VRECdt
+	maxintrvl = 10	// default
+	if (n > 1) { maxintrvl = $2 }
+	sprint(crrdir, "extras/cross_correlations/data/RIP%d-RDP%d-intrvl%d", RIPNUM, RDPNUM, intrvl)
+	sprint(crrsubdir, "%s/whole_cell",crrdir)
+	sprint(crrsys,"mkdir -p %s",crrsubdir)		// no problem if the subdirectory already exists
+	system(crrsys)
+	sprint(crrfilename, "%s/interval%d-cutoff%d", crrsubdir, intrvl, maxintrvl)
+	crrfile2 = new File()
+	check = crrfile2.ropen(crrfilename)
+	if (check) {
+		print "A file for intrv ",intrvl, "maxintrvl ", maxintrvl, " already exists. Loading data from file."
+		for id1 = 0, NLOGSYNS - 1 {
+			logsyn = logsynlist.object(id1)
+			logsyn.range = crrfile2.scanvar()
+		}
+		crrfile2.close()
+	} else {
+		crrfile2.wopen(crrfilename)
+		dtcrr = new Vector()
+		dtcrr.indgen(-intrvl+VRECdt, intrvl-VRECdt, VRECdt)
+		for id1 = 0, NLOGSYNS - 1 {
+			logsyn = logsynlist.object(id1)
+			logsyn.range = 0
+			print "RIP", RIPNUM, "RDP", RDPNUM, "interval = ", intrvl, "LOGSYN ", id1
+			for id2 = 0, NLOGSYNS - 1 {
+				if (id1 > id2) {
+					sprint(crrfilename, "%s/%d/%d", crrdir, id2, id1)
+				} else {
+					sprint(crrfilename, "%s/%d/%d", crrdir, id1, id2)
+				}
+				crrfile = new File()
+				check = crrfile.ropen(crrfilename)
+				if (check) {
+					crr = new Vector()
+					crr.vread(crrfile)
+					crrfile.close()
+					indmx = crr.max_ind()
+					if (dtcrr.x(indmx) > -maxintrvl && dtcrr.x(indmx) < maxintrvl) {
+						logsyn.range += crr.max * logsynlist.object(id2).numsyns
+					}
+				} else {
+					print "Unable to open", crrfilename
+				}
+			}
+			logsyn.range /= NSYNS
+			crrfile2.printf("%g\n", logsyn.range)
+		}
+		crrfile2.close()
+	}
+}
+
+//-------------------------------------------------------------------------------------------------------------------------------------
+// specify interval window for cross-correlation and make sure to select the relevant RIP and RDP
+// if a file already exists, data will be read from it, otherwise the peak cross-correlations matrix will be computed and written in a file
+proc rf_corr_matrix() { local intrvl, m, id1, id2, reverse, indmx
+	n = numarg()
+	intrvl = $1
+	m = intrvl / VRECdt
+	maxintrvl = 10	// default
+	if (n > 1) { maxintrvl = $2 }
+	sprint(crrdir, "extras/cross_correlations/data/RIP%d-RDP%d-intrvl%d", RIPNUM, RDPNUM, intrvl)
+	sprint(crrsubdir, "%s/matrix",crrdir)
+	sprint(crrsys,"mkdir -p %s",crrsubdir)		// no problem if the subdirectory already exists
+	system(crrsys)
+	sprint(crrfilename, "%s/interval%d-cutoff%d", crrsubdir, intrvl, maxintrvl)
+	crrfile2 = new File()
+	check = crrfile2.ropen(crrfilename)
+	if (check) {
+		print "A file for intrv ",intrvl, "maxintrvl ", maxintrvl, " already exists."
+		crrfile2.close()
+	} else {
+		crrfile2.wopen(crrfilename)
+		dtcrr = new Vector()
+		dtcrr.indgen(-intrvl+VRECdt, intrvl-VRECdt, VRECdt)
+		for id1 = 0, NLOGSYNS - 1 {
+			logsyn = logsynlist.object(id1)
+			logsyn.range = 0
+			print "RIP", RIPNUM, "RDP", RDPNUM, "interval = ", intrvl, "LOGSYN ", id1
+			for id2 = 0, NLOGSYNS - 1 {
+				if (id1 > id2) {
+					sprint(crrfilename, "%s/%d/%d", crrdir, id2, id1)
+				} else {
+					sprint(crrfilename, "%s/%d/%d", crrdir, id1, id2)
+				}
+				crrfile = new File()
+				check = crrfile.ropen(crrfilename)
+				if (check) {
+					crr = new Vector()
+					crr.vread(crrfile)
+					crrfile.close()
+					indmx = crr.max_ind()
+					if (dtcrr.x(indmx) > -maxintrvl && dtcrr.x(indmx) < maxintrvl) {
+						crrfile2.printf("%g", crr.max)
+					} else {
+						crrfile2.printf("0")
+					}
+					if (id2 < NLOGSYNS - 1) {
+						crrfile2.printf("\t")
+					}
+				} else {
+					print "Unable to open", crrfilename
+				}
+			}
+			crrfile2.printf("\n")
+		}
+		crrfile2.close()
+	}
+}
+
+//-------------------------------------------------------------------------------------------------------------------------------------
+
+//-------------------------------------------------------------------------------------------------------------------------------------
+objref clusts[1], synclust, synclustsil, clustsilavg
+objref subset_section_list
+objref compplot, clmpfile
+objref rndm
+strdef clmpfilename
+
+proc rf_corr_clusters() { local n, intrvl, m, id, i, j, clustnum, clustsil, color
+	n = numarg()
+	intrvl = $1
+	m = intrvl / VRECdt
+	maxintrvl = $2
+	th = $3	// criterion for clusteing *100 - see Matlab m files
+	tl = $4
+	c = $5
+	prepare_plotshape()
+	sprint(crrdir, "extras/cross_correlations/data/RIP%d-RDP%d-intrvl%d", RIPNUM, RDPNUM, intrvl)
+	sprint(crrsubdir, "%s/matrix",crrdir)
+	sprint(crrfilename, "%s/cluster-interval%d-cutoff%d-th%d-tl%d-c%d", crrsubdir, intrvl, maxintrvl, th, tl, c)
+	crrfile = new File()
+	check = crrfile.ropen(crrfilename)
+	synclust = new Vector()
+	synclustsil = new Vector()
+	clustsilavg = new Vector()
+//	rndm = new Random()
+//	rndm.uniform(1,10)
+	if (check) {
+		for id = 0, NLOGSYNS - 1 {
+			logsyn = logsynlist.object(id)
+			clustnum = crrfile.scanvar()
+			clustsil = crrfile.scanvar()
+			synclust.append(clustnum)
+			synclustsil.append(clustsil)
+			color = clustnum
+			if (color/10 == int(color/10) && color) { color = 5 }
+			criterion_mark(id, color)
+		}
+		crrfile.close()
+		nclusts = synclust.max
+		sprint(cmd, "th %d tl %d c %d nclusts=%d", th, tl, c, nclusts)
+		print cmd
+		objref clusts[nclusts+1]
+		for i = 0, nclusts {
+			avg = 0
+			clusts[i] = new Vector()
+			clusts[i].indvwhere(synclust, "==", i)
+			for j = 0, clusts[i].size-1 {
+				avg += synclustsil.x(clusts[i].x(j))
+			}
+			avg /= clusts[i].size
+			clustsilavg.append(avg)
+			for j = 0, clusts[i].size-1 {
+				logsyn = logsynlist.object(clusts[i].x(j))
+				
+//				color = synclustsil.x(logsyn.id)
+//				color = avg
+				color = synclust.x(logsyn.id)
+				if (color) {
+					color = 10*(1 + color - 10*int(color/10))
+				}
+				logsyn.sec.sec v(logsyn.loc) = color // for PlotShape
+			}
+		}
+		forsec soma_section_list {
+			for (x,0) v = -1	// soma merged with main trunk
+		}
+	} else {
+		print "No file!"
+	}
+}
+
+proc prepare_plotshape() { local size, i, r, g, b
+	clmpfilename = "extras/cross_correlations/jet_colormap"
+	clmpfile = new File()
+	check = clmpfile.ropen(clmpfilename)
+	if (check) {
+		size = 41
+//size = 2
+		compplot = new PlotShape()
+		compplot.exec_menu("Shape Plot")
+		compplot.variable("v")
+		compplot.colormap(size+1)
+		compplot.colormap(0,0,0,0)
+		for i = 1, size {
+			r = clmpfile.scanvar()
+			g = clmpfile.scanvar()
+			b = clmpfile.scanvar()
+			compplot.colormap(i, r, g, b)
+		}
+//compplot.colormap(1,255,0,0)
+//compplot.colormap(0,0,0,255)
+//		compplot.scale(-1, 1)
+		compplot.scale(0, 110)
+//		compplot.scale(0,nclusts)
+//		compplot.label(cmd)
+//		compplot.observe(dendrite_section_list)
+		clmpfile.close()
+	} else {
+		print "no colormap file"
+	}
+}
+
+// run only after rf_corr_clusters() has been run
+proc rf_corr_clusters_single() { local selclust
+	selclust = $1
+//	subset_section_list = new SectionList()
+	forall { for (x,0) v = -1 }
+	for j = 0, clusts[selclust].size-1 {
+		logsyn = logsynlist.object(clusts[selclust].x(j))
+		logsyn.sec.sec {
+			v(logsyn.loc) = 1
+//			v(logsyn.loc) = clustsilavg.x(selclust) // for PlotShape
+//			subset_section_list.append()
+		}
+	}
+//	subset_section_list.unique()
+//	compplot.observe(subset_section_list)
+	compplot.scale(-1, 1)
+}
+
+// first run rf_corr_clusters() then adjust size of plot shape including axes, diameter
+proc rf_corr_clusters_subsets() { local i, j
+	nsubs = $1	// number of subsets
+	subsize = int(nclusts / nsubs)
+	if (subsize*nsubs < nclusts) { subsize += 1 }
+	for i = 0, nsubs-1 {
+		subset_section_list = new SectionList()
+		for j = i*subsize, (i+1)*subsize-1 {
+			if (j < nclusts) {
+				for k = 0, clusts[j].size-1 {
+					logsynlist.object(clusts[j].x(k)).sec.sec subset_section_list.append()
+				}
+			}
+		}
+		subset_section_list.unique()
+		compplot.observe(subset_section_list)
+		compplot.variable("v")
+		compplot.scale(i*subsize, (i+1)*subsize-1)
+		sprint(lbl, "extras/cross_correlations/compartments%d.eps", i)
+		compplot.printfile(lbl)
+	}
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// ONLINE Computing
+// ============
+
+// user procedure to compute and plot cross-correlation between two vectors
+// enter either the two vectors or two logsyn id numbers, enter the size of the window (in ms) and optionally the color to plot
+// (negative color value means don't plot)
+proc corr() { local n, type, id, color, i, N, intrvl, m
+	plotter = plotterlist.object(0)
+	plotter.external_export_enable(0)
+	plotter.gtype=0 // change to Vm(t)
+	plotter.ordinate_selection(3)
+	n = numarg()
+	type = argtype(1)
+	if (type == 0) { 		// logsyn id
+		id = $1
+		logsyn = logsynlist.object(id)
+		V1 = logsyn.vrec.c
+	} else if (type == 1) {	// vector
+		V1 = $o1.c
+	}
+	type = argtype(2)
+	if (type == 0) { 		// logsyn id
+		id = $2
+		logsyn = logsynlist.object(id)
+		V2 = logsyn.vrec.c
+	} else if (type == 1) {	// vector
+		V2 = $o2.c
+	}
+	intrvl = $3
+	m = intrvl / VRECdt
+	N = V1.size	
+	if (N > m && N == V2.size) {
+		crr = new Vector()
+		dtcrr = new Vector()
+		v1 = V1.c(0, N-m)
+		for i = 0, m-2 {
+			v2 = V2.c(m-1-i, N-1-i)
+			crr.append(compute_cross_correlation(v1, v2, N, m))
+			dtcrr.append(0 - (m-1-i) * VRECdt)
+		}
+		v2 = V2.c(0, N-m)
+		for i = 0, m-1 {
+			v1 = V1.c(i, N-m+i)
+			crr.append(compute_cross_correlation(v1, v2, N, m))
+			dtcrr.append(i * VRECdt - 0)
+		}
+		color = 1
+		if (n == 4) { color = $4 }
+		if (color > 0) {
+			g = plotter.graph_export
+			plotter.external_keep_lines(1)
+			plotter.external_export_enable(1)
+			plot_corr(color, intrvl)
+			g.size(-intrvl, intrvl, -0.2, 1)
+		}
+//		g.exec_menu("View = plot")
+		plotter.external_keep_lines(0)
+		plotter.external_export_enable(0)
+	} else {
+		print "Problem with vector size(s)"
+	}
+}
+
+// =======================================================
+
+objref w1, w2
+// internal function called from corr()
+func compute_cross_correlation() { local N, m, cc, mu1, mu2, var1, var2
+	w1 = $o1
+	w2 = $o2
+	N = $3
+	m = $4
+	mu1 = w1.mean
+	mu2 = w2.mean
+	w1.sub(mu1)
+	w2.sub(mu2)
+	cc = w1.dot(w2) / (N - m)
+	var1 = w1.var
+	var2 = w2.var
+	cc = cc / sqrt(var1 * var2)
+	return cc
+}
+
+proc plot_corr() { local color, intrvl
+	color = $1
+	intrvl = $2
+	g.color(color)
+	crr.line(g, dtcrr)
+}
+
+// =======================================================
+
+// compute for the indicated logsyn id, the peak cross-correlation with every other synapse and present it in logsyn.range
+// optional maximal interval for the peak correlation value (a good correlation should be up to a few ms from zero)
+proc syn_corr() { local n, i, id, intrvl, maxintrvl, indmx
+	n = numarg()
+	id = $1
+	intrvl = $2
+	if (n >2) {
+		maxintrvl = $3
+	} else {
+		maxintrvl = 5	// default
+	}
+	dtcrr = new Vector()
+	dtcrr.indgen(-intrvl, intrvl, VRECdt)
+	for i = 0, NLOGSYNS-1 {
+		logsyn = logsynlist.object(i)
+		corr(id, i, intrvl, -1)	// (don't plot)
+		indmx = crr.max_ind()
+		if (dtcrr.x(indmx) > -maxintrvl && dtcrr.x(indmx) < maxintrvl) {
+			logsyn.range = crr.max
+			plot_corr(1, intrvl)
+		} else {
+			logsyn.range = 0
+			plot_corr(2, intrvl)
+		}
+	}
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+objref nocorr
+
+// automatically perform nocorr marking
+// select RIP and RDP and indicate synapse id, interval and maxinterval
+proc auto_nocorr() { local id, interval, maxinterval
+	id = $1
+	interval = $2
+	maxinterval = $3
+	rf_syn_corr(id, interval, maxinterval)
+	append_nocorr()
+	rf_syn_corr(id, interval, interval)
+	plotter = plotterlist.object(0)
+	// switch to range
+	plotter.gtype = 0
+	plotter.ordinate_selection(18)
+	mark_synapses() // spatiotemporal.hoc
+	mark_nocorr(5)
+}
+
+// after rf_dend_corr() has been run, this procedure will locate zero correlation sites
+// (if maxinterval < interval there may be insignificant correlations), and append their
+// id numbers to nocorr vector
+proc append_nocorr() { local i
+	nocorr = new Vector()
+	for i = 0, NLOGSYNS-1 {
+		logsyn = logsynlist.object(i)
+		if (!logsyn.range) {
+			nocorr.append(logsyn.id)
+		}
+	}
+}
+
+proc mark_nocorr() { local color, i
+	color = 6
+	if (numarg()) { color = $1 }
+	for i = 0, nocorr.size-1 {
+		criterion_mark(nocorr.x(i), color)
+	}
+}
+
+

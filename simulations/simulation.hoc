@@ -1,0 +1,417 @@
+// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+begintemplate Protocol
+public name
+public simdep
+public prefix
+public variant
+
+strdef name,prefix
+
+proc init() {
+	 name=$s1
+	 simdep=$2			// 0=RDP simulation; 1=RIP simulation; 2=without records
+	 prefix=$s3			// simulation's procedures begin with its prefix
+	 variant=$4			// in cases where there are several variants for a given simulation type
+}
+endtemplate Protocol
+// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+begintemplate Simulation
+public slct_ripnum
+public slct_rdpnum
+public prtcl
+public name
+
+strdef name
+
+proc init() {
+	 slct_ripnum=$1
+	 slct_rdpnum=$2
+	 prtcl=$3
+	 name=$s4
+}
+
+endtemplate Simulation
+// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+// list of all available protocols
+proc prepare_protocols() {
+	 // 1=name; 2=simulation dependency; 3=prefix
+	 prtcllist=new List()
+	 prtcllist.append(new Protocol("artificial vivo",0,"vivo",1))
+	 prtcllist.append(new Protocol("BPAP",1,"BPAP",1))
+	 prtcllist.append(new Protocol("EPSP",1,"EPSP",1))
+	 prtcllist.append(new Protocol("post EPSP",0,"EPSP",2))
+	 prtcllist.append(new Protocol("post EPSC",0,"EPSC",2))
+	 prtcllist.append(new Protocol("BPAP check",2,"BPAP_check",1))
+//	 prtcllist.append(new Protocol("train check",2,"train_check",1))
+	 prtcllist.append(new Protocol("EPSP check",2,"EPSP_check",1))
+	 prtcllist.append(new Protocol("EPSC check",2,"EPSC_check",2))
+	 prtcllist.append(new Protocol("resistance",2,"resistance",1))
+	 prtcllist.append(new Protocol("IF curve",2,"IF",1))
+	 prtcllist.append(new Protocol("2 points",2,"twopoint",1))
+	 NUMPRTCLS=prtcllist.count()
+	 prtcl_selection(PRTCL,0)
+	 str_status="Simulation Control - Ready"
+//	 vivo_mode(1)
+}
+
+// list of simulations to be run. user adds and removes protocols and then they are run in batch
+proc prepare_simlist() {
+	 simlist=new List()
+	 SIMNUM=0 // currently selected simulation
+	 NUMSIMS=0 // number of simulations in batch
+}
+
+proc add_to_simlist() {
+	 strdef name
+	 // 1-ripnum; 2-rdpnum; 3-prtcl
+	 sprint(name,"%d %d %s",RIP.id,RDP.id,prtcllist.object(PRTCL).name)
+	 simlist.append(new Simulation(SLCT_RIPNUM,SLCT_RDPNUM,PRTCL,name))
+	 NUMSIMS+=1
+	 SIMNUM=NUMSIMS
+	 simlist.select(SIMNUM)
+}
+
+proc remove_from_simlist() {
+	 if (NUMSIMS) {
+	 	simlist.remove(SIMNUM)
+	 	NUMSIMS-=1
+	 	SIMNUM=0
+	 }
+}
+
+proc simulation_selection() {
+	 SIMNUM=$1
+}
+
+proc prtcl_selection() {
+	 if (numarg()==1) {
+	 	sprint(cmd,"%s_undo()",prtcllist.object(PRTCL).prefix)
+	 	execute(cmd)
+	 }
+	 PRTCL=$1
+	 sprint(cmd,"%s_parameters()",prtcllist.object(PRTCL).prefix)
+	 execute(cmd)
+}
+
+// general simulation manager
+// ==========================
+
+// init & run
+func check_simulation() { local answer
+	 strdef question
+	 dbox=new HBox()
+	 answer=1
+	 if (prtcllist.object(PRTCL).simdep==0) { // RDP simulation
+	 	if (!RDP.rec_exist) {
+	 	   sprint(question,"%s will no longer be modifiable once it is run!",RDP.cfgname)
+		   answer=dbox.dialog(question,"Go","Cancel")
+		   if (answer) { RDP_lock() }
+		} else {
+		   sprint(question,"Records exist for %s, running might replace them with new ones!",RDP.cfgname)
+		   answer=dbox.dialog(question,"Go","Cancel")
+		}
+	 } else { if (prtcllist.object(PRTCL).simdep==1) { // RIP simulation
+	   	// temporary
+		// additional parameters (e.g. AMPap) may be written to an unmodifiable RIP
+		// all the others are not modifiable in the first place through control.hoc
+	    RIP.write_parameters()
+	 	if (!RIP.rec_exist) {
+	 	   sprint(question,"%s will no longer be modifiable once it is run!",RIP.cfgname)
+		   answer=dbox.dialog(question,"Go","Cancel")
+		   if (answer) { RIP_lock() }
+		} else {
+		   sprint(question,"Records exist for %s, running might replace them with new ones!",RIP.cfgname)
+		   answer=dbox.dialog(question,"Go","Cancel")
+		}
+	 } else { if (prtcllist.object(PRTCL).simdep==2) { // no records to be made
+	}}}
+	return answer
+}
+
+proc run_batch() { local i,ok
+	 ok=1
+	 for i=0,NUMSIMS-1 {
+	 	 SIMNUM=i
+	 	 RIP_selection(simlist.object(SIMNUM).slct_ripnum)
+		 browser_RIP_list.select(SLCT_RIPNUM)
+	 	 RDP_selection(simlist.object(SIMNUM).slct_rdpnum)
+		 browser_RDP_list.select(SLCT_RDPNUM)
+		 prtcl_selection(simlist.object(SIMNUM).prtcl)
+		 prtcllist.select(PRTCL)
+		 simlist.select(SIMNUM)
+		 if (!check_simulation()) {
+		 	ok=0
+			i=NUMSIMS
+		 }
+	 }
+	 if (ok) {
+	 	for i=0,NUMSIMS-1 {
+			SIMNUM=0
+			RIP_selection(simlist.object(SIMNUM).slct_ripnum)
+			browser_RIP_list.select(SLCT_RIPNUM)
+			RDP_selection(simlist.object(SIMNUM).slct_rdpnum)
+			browser_RDP_list.select(SLCT_RDPNUM)
+			prtcl_selection(simlist.object(SIMNUM).prtcl)
+			prtcllist.select(PRTCL)
+			simlist.select(SIMNUM)
+			if (UNBALANCED) {
+				print "balancing current"
+				current_balance(v_init)
+				print "done"
+				UNBALANCED=0
+			}
+			run_simulation()
+			remove_from_simlist()
+		}
+	 }
+}
+
+proc run_simulation() { local answer
+	 graphItem.erase_all
+	 sprint(cmd,"%s_undo()",prtcllist.object(PRTCL).prefix)
+	 execute(cmd)
+	 sprint(cmd,"%s_parameters()",prtcllist.object(PRTCL).prefix)
+	 execute(cmd)
+	 RECdt_adjust(1)
+	 REALTIME=1		 // flag: 1=simulation running, time is t; 0=off-line
+	 sprint(cmd,"%s_begin_simulation(%d)",prtcllist.object(PRTCL).prefix,prtcllist.object(PRTCL).variant)
+	 execute(cmd)
+	 REALTIME=0
+	 read_constant_records()
+}
+
+// the following while loop is used instead of the stdrun loop for increased efficiency
+proc my_run() { local s
+	run()
+/*
+	stoprun=0
+	s=0
+	startsw()
+	finitialize()
+	while (t<tstop && stoprun==0) {
+		fadvance()
+		s+=1
+		if (s%100==0) {
+			doNotify()
+			realtime=stopsw()
+		}
+	}
+*/
+}
+// ----------------------------------------------------------------------------
+
+proc set_TSTOP() {
+	 ok=$1
+	 if (ok) {
+	 	if (TSTOP<=0) { TSTOP=copyTSTOP }
+	 	if (prtcllist.object(PRTCL).simdep==0 || prtcllist.object(PRTCL).simdep==2) {
+		   tstop=TSTOP
+//		   sprint(str_tstop,"tstop = %d ms",tstop)
+		   sprint(str_status, "Ready (tstop = %d ms)", tstop)
+		}
+	 	RECdt_adjust(1)
+		WINDOW_adjust()
+	 } else { TSTOP=copyTSTOP }
+}
+
+proc set_EFREQ_VIVO() { local ok
+	 ok=$1
+	 if (ok) { copyEFREQ_VIVO=EFREQ_VIVO
+	 } else { EFREQ_VIVO=copyEFREQ_VIVO }
+}
+
+proc set_ECORR() { local ok
+	 ok=$1
+	 if (ok && ECORR >= 0 && ECORR <= 1) { copyECORR=ECORR
+	 } else { ECORR=copyECORR }
+}
+
+proc set_IFREQ_VIVO() { local ok
+	 ok=$1
+	 if (ok) { copyIFREQ_VIVO=IFREQ_VIVO
+	 } else { IFREQ_VIVO=copyIFREQ_VIVO }
+}
+
+proc set_INTRVL_VIVO_VAR() { local ok
+	 ok=$1
+	 if (ok) { copyINTRVL_VIVO_VAR=INTRVL_VIVO_VAR
+	 } else { INTRVL_VIVO_VAR=copyINTRVL_VIVO_VAR }
+}
+
+proc set_BIN_VIVO() { local ok
+	 ok=$1
+	 if (ok) { copyBIN_VIVO=BIN_VIVO
+	 } else { BIN_VIVO=copyBIN_VIVO }
+}
+
+proc vivo_record_control() {
+	vivbox=new VBox()
+	vivbox.intercept(1)
+		xpanel("Vi(t)")
+			xlabel("Vi(t) Sampling")
+			xvarlabel(str_VRECtime)
+			xvalue("record dt (ms)","VRECdt",1,"set_VREC_params(RDP_check())") // simulation.hoc
+			xvalue("record points","VRECpoints",1,"set_VREC_params(RDP_check())") // simulation.hoc
+		xpanel()
+		xpanel("sf")
+			xlabel("SF Sampling")
+			xvarlabel(str_RECdt)
+			xvalue("record pts","RECpoints",1,"RECdt_adjust(RDP_check())") // simulation.hoc
+		xpanel()
+		xpanel("vavg")
+			xlabel("Accumulated Average Voltage")
+			xvalue("averaging start (ms)","VAVG_START",1,"set_VAVG_START(RDP_check())") // synapses.hoc
+		xpanel()
+		xpanel("mavg")
+			xlabel("Interval Average Voltage")
+			xvarlabel(str_MAVGstart)
+			xvalue("interval","MAVGintrvl",1,"set_MAVGintrvl(RDP_check())") // simulation.hoc
+		xpanel()
+	vivbox.intercept(0)
+	vivbox.map("Vivo Records")
+}
+
+proc set_INTRVL_TYPE() { local ok
+	ok=$1
+	if (ok) {
+		INTRVL_TYPE=$2
+		copyINTRVL_TYPE=INTRVL_TYPE
+		if (INTRVL_TYPE==0) { str_input="Uniform"
+		} else if (INTRVL_TYPE==1) { str_input="Random"
+		} else if (INTRVL_TYPE==2) {
+	 		dbox=new VBox()
+			dbox.dialog("Please create an input frequency distance histogram to equalize")
+			str_input="Equalized"
+		}
+	} else { INTRVL_TYPE=copyINTRVL_TYPE }
+}
+
+proc input_control() {
+	inpbox=new HBox()
+	inpbox.intercept(1)
+		inp1box=new VBox()
+		inp1box.intercept(1)
+			xpanel("excitatory")
+				sprint(str_input,"excitatory - %s",str_input)
+//				xlabel("excitatory")
+				xvarlabel(str_input)
+				xmenu("type")
+					xbutton("uniform","set_INTRVL_TYPE(RDP_check(),0)")
+					xbutton("random","set_INTRVL_TYPE(RDP_check(),1)")
+					xbutton("equalized","set_INTRVL_TYPE(RDP_check(),2)")
+				xmenu()
+				xvalue("mean (Hz)","EFREQ_VIVO",1,"set_EFREQ_VIVO(RDP_check())") // simulation.hoc
+				xvalue("correlation [0,1]","ECORR",1,"set_ECORR(RDP_check())")
+				xvalue("ISI variance (ms)","INTRVL_VIVO_VAR",1,"set_INTRVL_VIVO_VAR(RDP_check())") // simulation.hoc
+				xvalue("dist bin","BIN_VIVO",1,"set_BIN_VIVO(RDP_check())") // simulation.hoc
+			xpanel()
+		inp1box.intercept(0)
+		inp1box.map()
+		inp2box=new VBox()
+		inp2box.intercept(1)
+			xpanel("inhibitory - Uniform")
+				xlabel("inhibitory")
+				xvalue("mean (Hz)","IFREQ_VIVO",1,"set_IFREQ_VIVO(RDP_check())") // simulation.hoc
+			xpanel()
+		inp2box.intercept(0)
+		inp2box.map()
+	inpbox.intercept(0)
+	inpbox.map("Synaptic Input")
+}
+
+// when RECpoints is changed, RECdt is updated
+proc RECdt_adjust() { local ok,mul_RECdt
+	 ok=$1
+	 if (ok) {
+		if (RECpoints<=0) { RECpoints=copyRECpoints }
+	 	RECdt=TSTOP/RECpoints
+	 	mul_RECdt=int(RECdt/dt)*dt // a RECdt which is an integer multiplication of dt
+		if (mul_RECdt) { // mul_RECdt is larger than dt
+		   if (mul_RECdt<RECdt) {
+		   	  RECdt=mul_RECdt
+			  RECpoints=TSTOP/RECdt // assume tstop is an integer multiplication of dt
+		   }
+		} else { // no sense in recording at smaller intervals than the simulation interval
+		   RECdt=dt
+		}
+	    	for i=0,NLOGSYNS-1 {
+			logsynlist.object(i).syn.mavgintrvl=RECdt
+		}
+		sprint(str_RECdt,"RECdt = %g ms",RECdt)
+	 } else {
+		RECpoints=copyRECpoints
+	 }
+}
+
+proc set_VREC_params() { local ok, length
+	ok = $1
+	if (ok) {
+		copyVRECdt = VRECdt
+		copyVRECpoints = VRECpoints
+		length = VRECpoints * VRECdt
+		sprint(str_VRECtime,"record length = %g ms",length)
+	} else {
+		VRECdt = copyVRECdt
+		VRECpoints = copyVRECpoints
+	}
+}
+
+proc WINDOW_adjust() { local ok,num_windows,mul_num_windows
+	 WINDOWstart=0
+	 if (!WINDOW) { WINDOW=500 }
+	 mul_num_windows=int(TSTOP/WINDOW)
+	 num_windows=TSTOP/WINDOW
+	 if (mul_num_windows) {
+	 	if (mul_num_windows<num_windows) {
+		   WINDOWstart=TSTOP-WINDOW*mul_num_windows
+		}
+	 } else {
+	    WINDOW=TSTOP
+	 }
+	 sprint(str_WINDOWstart,"Spikes (averages start = %g ms)",WINDOWstart)
+}
+
+proc MAVG_adjust() { local num_intvls,mul_num_intrvls
+	 MAVGstart=0
+	 if (!MAVGintrvl) { MAVGintrvl=1000 }
+	 mul_num_intrvls=int(TSTOP/MAVGintrvl)
+	 num_intrvls=TSTOP/MAVGintrvl
+	 if (mul_num_intrvls) {
+	 	if (mul_num_intrvls<num_intrvls) {
+		   MAVGstart=TSTOP-MAVGintrvl*mul_num_intrvls
+		}
+	 } else {
+	    MAVGintrvl=TSTOP
+	 }
+	 sprint(str_MAVGstart,"start at %g ms",MAVGstart)
+}
+
+proc set_MAVGintrvl() { local ok
+	ok=$1
+	if (ok) {
+		MAVG_adjust()
+		set_averaging()
+	} else { MAVGintrvl=copyMAVGintrvl }
+}
+
+proc set_VAVG_START() { local ok,i
+	 ok=$1
+	 if (ok) {
+	 	set_averaging()
+		copyVAVG_START=VAVG_START
+	 } else { VAVG_START=copyVAVG_START }
+}
+
+// ----------------------------------------------------------------------------
+
+proc set_dt() { local ok
+	 ok=$1
+	 if (ok) {
+	 	steps_per_ms=1/dt
+//	 	set_SFS(1,0) // SFS depends on dt, if RIP is modifiable, then RDP must be too (1)
+//	 	set_SFS(1,1) // excitatory
+	 	RECdt_adjust(1)
+	 } else { dt=copydt }
+}

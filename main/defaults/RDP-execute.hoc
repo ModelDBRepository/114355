@@ -1,0 +1,22 @@
+// RDP Execute
+// ===========
+
+// this is executed after reading from file, so setting is automatically approved (flag=1)
+set_TSTOP(1)
+set_SCALE_ENABLE(1)
+label_gmax0()
+set_CONTINUOUS(1)
+set_EVENT_WINDOW(1)
+set_VEQ(1)
+set_ORDER(1)
+set_SCALING_TYPE(1,SCALING_TYPE)
+set_TAU(1)
+set_INTRVL_TYPE(1,INTRVL_TYPE)
+set_EFREQ_VIVO(1)
+set_ECORR(1)
+set_IFREQ_VIVO(1)
+set_INTRVL_VIVO_VAR(1)
+set_BIN_VIVO(1)
+set_VAVG_START(1)
+set_MAVGintrvl(1)
+set_VREC_params(1)

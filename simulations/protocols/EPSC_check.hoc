@@ -1,0 +1,97 @@
+// create single EPSP at each synapse and record the current measured at the soma with voltage clamp
+
+proc EPSC_check_parameters() {
+	tstop=50
+	sprint(str_tstop,"tstop = %d ms",tstop)
+	NUM=1
+	STRT=5    	 // input start time
+	NOISE=0   	 // noise level
+	INTRVL=10*tstop	 // inter-spike average interval (big number)
+	VChold=v_init//-70.3		 // voltage clamp holding potential
+	WEIGHT = 0.001 // by default synapse has a 1 nS conductance
+}
+
+proc EPSC_check_stim() {
+	sprint(cmd,"access %s",ORIGIN_NAME)
+	execute(cmd) // all NetStims attached logically to soma (it doesn't matter where you put them)
+	objref source,trvl_syn
+	source=new NetStim(0.5)
+	source.number=NUM
+	source.start=STRT
+	source.interval=INTRVL
+	source.noise=NOISE
+//	For some reason this only works when the global scaling is delted from the ScalExp2Syn.mod file...
+	trvl_syn=new Exp2Syn(0.5)
+	trvl_syn.tau1=SYNTAU1
+	trvl_syn.tau2=SYNTAU2
+	trvl_syn.e=SYNE
+	syn=new NetCon(source,trvl_syn,0.9,0, WEIGHT)	
+	objref vclmp
+	vclmp=new VClamp(0.5)
+	vclmp.dur[0]=tstop
+	vclmp.amp[0]=VChold
+}
+
+proc EPSC_check_recvec_initial() {
+	EPSC_time=new Vector()
+	EPSC_time.indgen(0,tstop+dt,dt) // record only from start of EPSP
+}
+
+proc EPSC_check_recvec() {
+	sEPSCrec=new Vector(EPSC_time.size)
+	sEPSCrec.record(&vclmp.i,EPSC_time)
+}
+
+proc EPSC_check_plot() { local loc
+	strdef lbl
+	graphItem.size(0,tstop,-20,0)
+	graphItem.addexpr("vclmp.i",1,1)
+	graphItem.addexpr("LOGSYN.syn.i",2,1)
+	sprint(lbl,"EPSC (nA) %3.2f um with SF=%2.2f",LOGSYN.dist,LOGSYN.syn.Esf)
+	graphItem.align(0.5, 1)
+	graphItem.label(0.5,1, lbl)
+	graphItem.align(0,0)
+	graphItem.label(0.5,0,"time (ms)")
+}
+
+proc EPSC_check_undo(){
+	objref sEPSCrec
+	objref EPSC_time
+	objref syn
+	objref logsyn
+	objref source
+	objref vclmp
+	objref trvl_syn
+}
+
+proc EPSC_check_begin_simulation() { local i, enable, variant, weight, gsyn
+	// variant: 1=all SF=1; 2=current SF profile
+	variant=$1
+	enable = SCALE_ENABLE
+	SCALE_ENABLE = 0
+	set_SCALE_ENABLE(1,1)
+	EPSC_stim()
+//	EPSC_check_plot()
+	EPSC_recvec_initial()
+	logsyn = LOGSYN
+	logsyn.sec.sec trvl_syn.loc(logsyn.loc)
+	EPSC_recvec()
+	if (variant==2) {
+		reclist.object(1).read_record() // read SFs (which get reset at beginning of simulation)
+		syn.weight = logsyn.syn.Egmax * WEIGHT
+	}
+	gsyn = syn.weight * 1000 	// nS
+ 	sprint(str_status,"Running EPSC gsyn = %g nS", gsyn)
+ 	shape_plot.point_mark(trvl_syn, 7)
+	my_run()
+//		sEPSCrec.add(-sEPSCrec.x(0)) // subtract baseline
+	sEPSCrec.mul(1000)			 // transform to pico Amps
+	graphItem.size(0,50,-20,0)
+	sEPSCrec.line(graphItem, EPSC_time)
+	SCALE_ENABLE = enable
+	set_SCALE_ENABLE(1,1)
+	reset_records()
+	str_status="Ready"
+}
+
+

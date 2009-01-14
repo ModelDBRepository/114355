@@ -1,0 +1,80 @@
+strdef str_version
+str_version = "Homeostatic Synaptic Plasticity (Version 8)"
+
+// variables
+// =========
+PRTCL=0
+NSEGAx = 5	// number of axon segments
+// display
+SLCT_LOGSYN=0			// currently marked logical synapse
+SLCT_BRANCH=0			// currently marked branch
+// internal
+REALTIME=0		// flag: 1=program in real time mode (time=t)
+SOMA_ATTACHED=1		// by default soma is initially attached to its dendrites
+AXON_ATTACHED=1		// by default axon is initially attached to the soma
+SLCT_RDPNUM=0		   		// currently selected RDP serial number
+SLCT_RIPNUM=0		   		// currently selected RIP serial number
+RDPNUM=-1					// just so that this variable should exist
+RIPNUM=-1					// just so that this variable should exist
+
+RECstart=0
+WINDOWstart=0
+MAVGstart=0
+
+NSYNS=0		// just so this variable can be accepted as external in records.hoc
+NLOGSYNS=0	// just so this variable can be accepted as external in records.hoc
+NSUBGS = 0
+
+// parameters
+// ==========
+param_val = 0		// used in configurations.hoc for writing parameters to file
+// cell paramaters (per program run)
+// ---------------------------------
+
+CELL_CFG=1			// flag: 0=it is no longer possible to configure the cell; 1=configurable
+
+// run-independent parameters
+// ------------0--------------
+xopen("../main/defaults/cell-default.hoc")
+xopen("../main/defaults/cell-copy.hoc")
+xopen("../main/defaults/RIP-default.hoc")
+xopen("../main/defaults/RIP-copy.hoc")
+
+// not for user
+secondorder=0
+//n_axon_seg = 5			// number of axon node segments
+gmax_copy_exists=0			// flag: 0=a copy of an sf profile not yet made
+
+// run-dependent parameters
+// ------------------------
+xopen("../main/defaults/RDP-default.hoc")
+xopen("../main/defaults/RDP-copy.hoc")
+xopen("../main/defaults/analysis-default.hoc")
+
+//tstop=TSTOP
+// not for user
+//SFMX=100                // sf ceiling
+selsec_flag = 0	// no section has been selected to form a special subtree
+
+// simulation
+// ----------
+
+TSTOP_BPAP_check=100
+T1_BPAP_check=3 // tolerence for half width spotting
+T2_BPAP_check=1 // tolerence for half width spotting
+WINDOW_BPAP_check=3
+
+
+// just so d1 and d2 will be at the top level for range_distribution in Gasparini.hoc:
+d1 = 0
+d2 = 0
+
+
+
+
+
+
+
+
+
+

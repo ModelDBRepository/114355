@@ -1,0 +1,10 @@
+// cell DEFAULT Parameters
+// =======================
+
+SLCT_MORPH = 4
+SLCT_LAYOUT = 1
+SLCT_DISTRIB = 3
+SYNINT = 1
+SEGLEN = 25
+SEGLEN2 = 5
+NLEAFSECS = 50

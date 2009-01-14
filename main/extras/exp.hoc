@@ -1,0 +1,9 @@
+create soma
+access soma
+objref a
+a=new stam(0.5)
+
+func go() {
+	a.draw($1)
+	return a.d
+}

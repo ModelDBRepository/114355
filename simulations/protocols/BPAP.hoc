@@ -1,0 +1,58 @@
+// create single EPSP at each synapse and record the voltage measured at that synapse and
+// at the soma
+proc BPAP_parameters() {
+	 tstop=50
+	 sprint(str_tstop,"tstop = %d ms",tstop)
+	 STRT=0    	 // input start time
+}
+
+proc BPAP_stim() {
+	 sprint(cmd,"%s imp = new IClamp(0.5)",ORIGIN_NAME)
+	 execute(cmd)
+	 imp.dur = DURap
+	 imp.amp = AMPap
+	 imp.del = STRT
+}
+
+proc BPAP_recvec() { local loc,i
+	 BPAP_time=new Vector()
+	 BPAP_time.indgen(STRT,tstop+dt,dt) // record only from start of BPAP
+	 for i=0,NLOGSYNS-1 {
+	 	 logsyn=logsynlist.object(i)
+		 loc=logsyn.loc
+		 logsyn.BPAPrec=new Vector(BPAP_time.size)
+		 logsyn.BPAPrec.record(&logsyn.sec.sec.v(loc),BPAP_time)
+	 }
+	 APrec=new Vector(BPAP_time.size)
+	 sprint(cmd,"APrec.record(&%s.v(0.5),BPAP_time)",ORIGIN_NAME)
+	 execute(cmd)
+}
+
+proc BPAP_undo(){
+	 objref imp
+	 objref BPAP_time
+	 objref APrec
+}
+
+proc BPAP_begin_simulation() { local i,enable
+	enable=SCALE_ENABLE
+	SCALE_ENABLE=0
+	set_SCALE_ENABLE(1)
+	reset_records()
+	BPAP_stim()
+	BPAP_recvec()
+/*
+	for i=0,NLOGSYNS-1 {
+		logsyn=logsynlist.object(i)
+	}
+*/
+	str_status="Running BPAP"
+	my_run()
+	SCALE_ENABLE=enable
+	set_SCALE_ENABLE(1)
+	write_BPAP_records(APrec.size(),dt,STRT,APrec)
+	reset_records()
+	str_status="Ready"
+}
+
+ 

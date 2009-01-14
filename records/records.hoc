@@ -1,0 +1,651 @@
+//////////////////////////////////////////////////////////////////////////////////////////////
+//
+//                                      =================
+//////////////////////////////////////////////////////////////////////////////////////////////
+
+// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+begintemplate Bin
+
+public center
+public value
+public accumulate
+public logsynlist
+public numsyns
+public update_logsyns
+
+objref logsynlist
+
+proc init() {
+	 center=$1
+	 value=0
+	 accumulate=0
+	 logsynlist=new List()
+	 numsyns=0
+}
+
+proc update_logsyns() { local i
+	for i=0,logsynlist.count()-1 {
+		logsynlist.object(i).set_bin_numsyns(numsyns)
+	}
+}
+
+endtemplate Bin
+// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+
+begintemplate ResultRecord
+
+public read_record	  // procedure to read records from file and load the synapse
+public write_record	  // procedure to write synaptic records into record files
+public recname	  	// name used for menu and graph
+public recloc		// location: 0=dendrite; 1=soma
+public recdep  	  	// dependency: 0=cell and run dependent; 1=cell dependent
+public rectype		// type: vector=; 1=variable
+public recnum		// internal serial number
+public runnum		// either the simulation result to be saved, or a simulation result to be loaded
+public minaxis		// minimum value for graphing
+public maxaxis		// maximum value for graphing
+public constant
+public varmax
+public varmin
+public recvar_histogram
+public recvec_input_frequency
+public recvec_peak
+public recvec_time2peak
+public recvec_time_average
+public recvec_time_std
+public recvec_size
+public recvec_dt
+public recvec_start
+public recvec
+public reset_record
+public delete_record
+public record_exists
+public record_disp
+public binlist,bins
+public spike_times
+public isi_calculation
+public spikes
+public numspikes
+public Hz
+public CV
+public recvar_vec	// recvar_vec is either all variable values (e.g. sf) or all vector summary values (e.g. peak)
+public recvec_avg
+public recvec_synapse_average
+public combined_comparison,copy_combined
+public recvar_inverse
+
+external NLOGSYNS,NSYNS,logsynlist,CELL,NBINS,TSTOP
+external RIPNUM,RDPNUM
+external SPIKE_THRESHOLD
+external CUTOFF
+external SPIKEstart
+
+objref recfile
+objref recvec
+objref recvec_avg
+objref longrecvec
+objref recvar_vec		  // vector with the variable value for each synapse
+objref combined1,combined2	// previous (combined1) and current (combined2) non restable variable record
+objref temp_vec
+//objref recvar_hist
+objref dbox
+objref bins,binlist,bin
+objref spikes,temp_spikes
+
+strdef recname,recfilename,recdir,sys
+strdef question
+
+proc init() {
+	// $s1=record name; $2=dependency; $3=type; $4=record number; $5=run serial number
+	recname=$s1	  	// name used for menu and graph
+	recloc=$2		// location: 0=dendrite; 1=soma
+	recdep=$3  	  	// dependency: 0=cell and run dependent; 1=cell dependent
+	rectype=$4		// type: 0=varialbe; 1=vector; 2=range variable
+	recnum=$5		// internal serial number
+	recdouble=$6		// flag: 0=single record; 1=excitatory + inhibitory synapses
+	minaxis=$7		// minimum value for graphing
+	maxaxis=$8		// maximum value for graphing
+	constant=$9		// flag: 0=record reread each time; 1=record constantly loaded
+	record_exists=0 // flag: 0=record does not exist; 1=exists
+	record_disp=0	// if record_disp=1, then display record even if it does not exist
+	if (recdep==0 && (rectype==0 || rectype==2)) { // real time variable records and input vectors
+	   record_disp=1
+	}
+	varmin=0	   // min variable value
+	varmax=0	   // max variable value
+	numisis=0	   // number of ISIs after cutoff
+	combined1=new Vector(NLOGSYNS,1)
+	combined2=new Vector(NLOGSYNS,1)
+}
+
+proc recvar_inverse() { // recvar_vec*-1 (e.g. EPSC negative current cumulative histogram)
+	recvar_vec.mul(-1)
+  	varmin=recvar_vec.min()
+	varmax=recvar_vec.max()
+}
+
+func recvar_histogram() { local n,i,width,b,total,weight,norm,normalize
+	normalize=$1
+	n=numarg()
+	if (n==2) { temp_vec=$o2 } // an additional vector is binned by this record's vector
+	 width=0
+	 b=0
+	 if (record_exists || record_disp) {
+	 	binlist=new List()
+ 		bins=new Vector()
+		width=(varmax-varmin)/NBINS
+		for i=1,NBINS {
+			bins.append(i*width+varmin)
+			binlist.append(new Bin((i-0.5)*width+varmin))
+		}
+		if (recloc==0) { // synaptic variable histogram
+		   total=NLOGSYNS
+		   norm=NSYNS
+		} else if (recloc==1) { // ISI histogram
+		   total=numisis
+		   norm=total
+		   weight=1
+		}
+		for i=0,total-1 {
+		   b=bins.indwhere(">=",recvar_vec.x(i)) // returns the index of the FIRST element
+		   bin=binlist.object(b)
+		   if (recloc==0) {
+		   	bin.logsynlist.append(logsynlist.object(i))
+			bin.numsyns+=logsynlist.object(i).numsyns
+			if (n==1) { weight=logsynlist.object(i).numsyns
+			} else if (n==2) { weight=temp_vec.x(i)*logsynlist.object(i).numsyns } // the value binned by recvar_vec
+		   }
+		   bin.value+=weight // in the case of logical synapses all synapses represented by a logical synapse must be counted
+		}
+		for b=0,NBINS-1 {
+			bin=binlist.object(b)
+			if (n==2) { bin.update_logsyns() }
+			if (normalize) { bin.value/=norm }
+			if (b==0) { binlist.object(0).accumulate=binlist.object(0).value
+			} else { bin.accumulate=bin.value+binlist.object(b-1).accumulate }
+		}
+	 }
+	 return width
+}
+
+proc recvec_input_frequency() { local i,freq
+	if (record_exists && recloc==0 && rectype==2) { // dendritic event (input) vector records
+		recvar_vec=new Vector()
+		for i=0,NLOGSYNS-1 {
+			logsynlist.object(i).getrec(recdep,rectype,recnum,recvec)
+			freq=recvec.size()/logsynlist.object(i).numsyns*1000/TSTOP
+			recvar_vec.append(freq)
+		}
+	  	 varmin=recvar_vec.min()
+	  	 varmax=recvar_vec.max()
+	}
+}
+
+proc recvec_peak() { local i
+	if (record_exists && recloc==0 && rectype==1) { // dendritic time vector records
+		recvar_vec=new Vector()
+		for i=0,NLOGSYNS-1 {
+			logsynlist.object(i).getrec(recdep,rectype,recnum,recvec)
+			recvec.add(-recvec.x(0))
+			recvar_vec.append(recvec.abs.max())
+		}
+	  	 varmin=recvar_vec.min()
+	  	 varmax=recvar_vec.max()
+	}
+}
+
+proc recvec_time2peak() { local i
+	if (record_exists && recloc==0 && rectype==1) { // dendritic time vector records
+		recvar_vec=new Vector()
+		for i=0,NLOGSYNS-1 {
+			logsynlist.object(i).getrec(recdep,rectype,recnum,recvec)
+			recvec.add(-recvec.x(0))
+			recvar_vec.append(recvec_start+recvec.abs.max_ind()*recvec_dt)
+		}
+	  	 varmin=recvar_vec.min()
+	  	 varmax=recvar_vec.max()
+	}
+}
+
+proc copy_combined() { local type
+	type=$1
+	if (type==1) { combined1=recvar_vec.c
+	} else if (type==2) { combined2=recvar_vec.c }
+}
+
+// produce a vector with ratio between the two recent variable records (before last/last)
+proc combined_comparison() { local type
+	type=$1	// 1=ratio; 2=difference
+	recvar_vec=combined1.c
+	if (type==1) 		{ recvar_vec.div(combined2)
+	} else if (type==2)	{ recvar_vec.sub(combined2) }
+  	varmin=recvar_vec.min()
+	varmax=recvar_vec.max()
+}
+// create a vector (recvar_vec) in which each element represents the average for a synapse
+proc recvec_time_average() { local i
+	if (record_exists && recloc==0 && rectype==1) { // dendritic time vector records
+		recvar_vec=new Vector()
+//		temp_vec=new Vector()
+		for i=0,NLOGSYNS-1 {
+			logsynlist.object(i).getrec(recdep,rectype,recnum,recvec)
+//			temp_vec.integral(recvec,recvec_dt)
+//			recvar_vec.append(temp_vec.x(recvec_size-1)/(recvec_size*recvec_dt))
+			recvar_vec.append(recvec.sum()/recvec_size)
+		}
+	  	 varmin=recvar_vec.min()
+	  	 varmax=recvar_vec.max()
+	}
+}
+
+// create a vector (recvar_vec) in which each element represents the standard deviation for a synapse
+proc recvec_time_std() { local i
+	if (record_exists && recloc==0 && rectype==1) { // dendritic time vector records
+		recvar_vec=new Vector()
+		for i=0,NLOGSYNS-1 {
+			logsynlist.object(i).getrec(recdep,rectype,recnum,recvec)
+			recvar_vec.append(recvec.stdev())
+		}
+	  	 varmin=recvar_vec.min()
+	  	 varmax=recvar_vec.max()
+	}
+}
+
+
+proc recvec_synapse_average() { local i
+	 if (recloc==0 && rectype==1) { // dendritic time records
+	 	recvec_avg=new Vector(recvec_size)
+		for i=0,NLOGSYNS-1 {
+			logsynlist.object(i).getrec(recdep,rectype,recnum,recvec)
+			recvec_avg.add(recvec.mul(logsynlist.object(i).numsyns))
+		}
+		recvec_avg.mul(1/NSYNS)
+	 }
+}
+
+proc spike_times() { local id,time,volt,inside,x1,x2,t1,t2
+	 if (record_exists && recloc==1 && rectype==1) { // used only for voltage time vector at soma
+	 	x1=$1
+		x2=$2
+		t1=recvec_start+recvec_dt*x1
+		t2=recvec_start+recvec_dt*(x2-1)
+		inside=0
+		spikes=new Vector()
+//		for id=0,recvec_size-1 {
+		for id=x1,x2-1 {
+			volt=recvec.x(id)
+			if (!inside && volt>=SPIKE_THRESHOLD) {
+			   inside=1
+			   time=recvec_start+id*recvec_dt
+			   if (time>=SPIKEstart) {
+			   	  spikes.append(time)
+			   }
+			}
+			if (inside && volt<SPIKE_THRESHOLD) {
+			   inside=0
+			}
+		}
+		numspikes=spikes.size()
+		Hz=numspikes/(t2-t1)*1000
+	 }
+}
+
+proc isi_calculation() { local i,isi
+	 recvar_vec=new Vector()
+	 for i=1,numspikes-1 {
+	 	 isi=spikes.x(i)-spikes.x(i-1)
+		 if (isi<=CUTOFF) { recvar_vec.append(isi) }
+	 }
+	 CV=recvar_vec.stdev()/recvar_vec.mean()
+	 varmin=recvar_vec.min()
+	 varmax=recvar_vec.max()
+	 numisis=recvar_vec.size()
+}
+
+// ---------------------------------------------------------------------------------
+
+proc name_record() {
+	 if (recdep==0) {
+	 	sprint(recdir,"../records/files/%s/RIP-%d/RDP-%d", CELL, RIPNUM, RDPNUM)
+//		sprint(sys,"mkdir -p %s",recdir)
+//		system(sys)
+		sprint(recfilename,"%s/%s",recdir, recname)
+	 } else {
+	 	sprint(recdir,"../records/files/%s/RIP-%d", CELL, RIPNUM)
+//		sprint(sys,"mkdir -p %s",recdir)
+//		system(sys)
+	    sprint(recfilename,"%s/%s",recdir, recname)
+	 }
+}
+
+proc read_record() { local i,j,k,size
+	recfile=new File()
+	name_record()
+	record_exists=recfile.ropen(recfilename)
+	if (record_exists) {
+	   if (recloc==1) { // somatic record
+	   	  recvec=new Vector()
+	   	  longrecvec=new Vector()
+  	   	  longrecvec.vread(recfile)
+		  recvec_size=longrecvec.x(0)
+		  recvec_dt=longrecvec.x(1)
+		  recvec_start=longrecvec.x(2)
+		  recvec.copy(longrecvec,3,3+recvec_size-1)
+	   	  objref longrecvec  // clear this temporary vector
+	   } else {
+	   	  if (rectype==0) { // variable
+		  	 recvar_vec=new Vector()
+	   	  	 for i=0,NLOGSYNS-1 {
+		  	 	 recvar=recfile.scanvar()
+				 recvar_vec.append(recvar)
+	   	   	 	 logsynlist.object(i).setrec(recdep,rectype,recnum,recvar)
+	   	  	 }
+		  	 varmin=recvar_vec.min()
+		  	 varmax=recvar_vec.max()
+	   	  } else { if (rectype==1) { // time vector
+	   	  	 recvec=new Vector()
+	   	  	 longrecvec=new Vector()
+  	   	  	 longrecvec.vread(recfile)
+		  	 recvec_size=longrecvec.x(0)
+		  	 recvec_dt=longrecvec.x(1)
+		  	 recvec_start=longrecvec.x(2)
+	   	  	 for i=0,NLOGSYNS-1 {
+	  	   	 	 recvec.copy(longrecvec,3+i*recvec_size,3+(i+1)*recvec_size-1)
+			 	 logsynlist.object(i).setrec(recdep,rectype,recnum,recvec)
+	      	 }
+	   	  	 objref longrecvec  // clear this temporary vector
+	   	  } else { if (rectype==2) { // data vector
+	   	  	 longrecvec=new Vector()
+  	   	  	 longrecvec.vread(recfile)
+	   	  	 j=0
+			 for i=0,NLOGSYNS-1 {
+	  		 	 size=longrecvec.x(j)
+				 if (size) {
+				 	k=j+size
+	   	  	 		recvec=new Vector()
+	   		 	 	recvec.copy(longrecvec,j+1,k)
+			 	 	logsynlist.object(i).setrec(recdep,rectype,recnum,recvec)
+			 	 	j=k+1
+				 } else {
+				    j+=1 // skip an empty vector (size=0)
+				 }
+	   	  	 }
+	   	  	 objref longrecvec  // clear this temporary vector
+	   	  }}}
+	   }
+	}
+	if (recdep==2) { // a general record that has no record file (e.g. distance from soma)
+		record_exists=1
+		if (rectype==0) { // variable
+			recvar_vec=new Vector()
+	   	  	for i=0,NLOGSYNS-1 {
+	   	   	 	logsynlist.object(i).getrec(recdep,rectype,recnum,&recvar)
+				recvar_vec.append(recvar)
+	   	  	}
+		  	varmin=recvar_vec.min()
+		  	varmax=recvar_vec.max()
+		}
+	}
+	recfile.close()
+}
+
+proc write_record() { local i,file_exists
+	recfile=new File()
+	name_record()
+	file_exists=recfile.ropen(recfilename)
+	if (file_exists) { recfile.unlink() } // delete existing record do avoid appendage
+	recfile.wopen(recfilename)
+	if (recloc==1) { // somatic record
+	   longrecvec=new Vector()
+	   recvec_size=$1
+	   recvec_dt=$2
+	   recvec_start=$3
+	   recvec=$o4
+	   longrecvec.append(recvec_size)
+	   longrecvec.append(recvec_dt)
+	   longrecvec.append(recvec_start)
+	   longrecvec.append(recvec)
+  	   longrecvec.vwrite(recfile)
+	   objref longrecvec  // clear this temporary vector
+	} else { // dendritic record
+	   if (rectype==0) { // variable
+		  recvar_vec=new Vector()
+	   	  for i=0,NLOGSYNS-1 {
+	   	  	  logsynlist.object(i).getrec(recdep,rectype,recnum,&recvar)
+			  recvar_vec.append(recvar)
+	   	  	  recfile.printf("%g\n",recvar)
+	   	  }
+		  varmin=recvar_vec.min()
+		  varmax=recvar_vec.max()	
+	   } else { if (rectype==1) { // time vector
+	   	  longrecvec=new Vector()
+	   	  recvec_size=$1
+	   	  recvec_dt=$2
+	   	  recvec_start=$3
+	   	  longrecvec.append(recvec_size)
+	   	  longrecvec.append(recvec_dt)
+	   	  longrecvec.append(recvec_start)
+	  	  for i=0,NLOGSYNS-1 {
+		  	  logsynlist.object(i).getrec(recdep,rectype,recnum,recvec)
+		  	  longrecvec.append(recvec)
+  	   	  }
+		  longrecvec.vwrite(recfile)
+	   	  objref longrecvec  // clear this temporary vector
+	   } else { if (rectype==2) { // data vector
+	   	  longrecvec=new Vector()
+	   	  for i=0,NLOGSYNS-1 {
+	  	  	  logsynlist.object(i).getrec(recdep,rectype,recnum,recvec)
+		  	  longrecvec.append(recvec.size())
+			  longrecvec.append(recvec)
+	   	  }
+  	   	  longrecvec.vwrite(recfile)
+	   	  objref longrecvec  // clear this temporary vector
+	   }}}
+	}
+	recfile.close()
+	record_exists=1
+}
+
+proc reset_record() {
+	record_exists=0
+	recvec_size=0
+	recvec_dt=0
+	recvec_start=0
+	recvec=new Vector()
+	recvar_vec=new Vector()
+	varmin=0
+	varmax=0
+    for i=0,NLOGSYNS-1 {
+	   logsynlist.object(i).reset_record(recdep,rectype,recnum)
+	}
+}
+
+func delete_record() { local answer,file_exists
+	 answer=1
+	 recfile=new File()
+	 name_record()
+	 file_exists=recfile.ropen(recfilename)
+	 if (file_exists) {
+	 	sprint(question,"Delete %s record file in RDP %d (RIP %d)?",recname,RDPNUM,RIPNUM)
+	 	dbox=new HBox()
+	 	answer=dbox.dialog(question,"Yes","No")
+	 	if (answer) {
+	 	   reset_record()
+		   recfile.unlink()
+		}
+		recfile.close()
+	 }
+	 return answer
+}
+	   
+endtemplate ResultRecord
+// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+// list and features of all records available
+proc record_manager() { local i
+// SynapticRecord(name,location,dependency,type,number,double,minval,maxval,record re-read/constant)
+// update Logical_Synapse template and menus in plots.hoc
+   	 reclist=new List()
+	 // -------------------------------------------------------------
+	 reclist.append(new ResultRecord("gmax0",0,0,0,0,1,0.0,2,1))	// 0
+	 reclist.append(new ResultRecord("gmax",0,0,0,1,1,0.0,2,1))		// 1
+	 reclist.append(new ResultRecord("vavg",0,0,0,2,0,VEQ-5,VEQ+5,0))	// 2 !!! update set_VEQ() in synapses.hoc
+	 reclist.append(new ResultRecord("Vm(t)",0,0,1,0,0,-65,25,0))		// 3 !!! update write_dendrite_...()
+	 reclist.append(new ResultRecord("gmax(t)",0,0,1,1,1,0.0,1,0))	  	// 4 !!! update write_dendrite_...()
+	 reclist.append(new ResultRecord("mavg(t)",0,0,1,2,0,VEQ-5,VEQ+5,0))  	// 5 !!! update write_dendrite_...()
+	 reclist.append(new ResultRecord("EPSP",0,0,1,3,0,-65,25,0))	  	// 6 !!! update write_dendrite_...()
+	 reclist.append(new ResultRecord("soma EPSP",0,0,1,4,0,-65,25,0))	// 7 !!! update write_dendrite_...()
+	 reclist.append(new ResultRecord("soma EPSC",0,0,1,5,0,-20,0,0))	// 8 !!! update write_dendrite_...()
+	 reclist.append(new ResultRecord("input",0,0,2,0,0,-300,900,1))	  	// 9
+	 // -------------------------------------------------------------
+	 reclist.append(new ResultRecord("EPSP",0,1,1,0,0,-65,25,0))		// 10
+	 reclist.append(new ResultRecord("soma EPSP",0,1,1,1,0,-65,25,0))	// 11
+	 reclist.append(new ResultRecord("BPAP",0,1,1,2,0,-65,25,0))		// 12
+	 // -------------------------------------------------------------
+	 reclist.append(new ResultRecord("distance",0,2,0,0,0,-300,900,1))	// 13
+	 // -------------------------------------------------------------
+	 reclist.append(new ResultRecord("soma v(t)",1,0,1,0,0,-65,25,0))	// 14
+	 reclist.append(new ResultRecord("soma AP(t)",1,1,1,0,0,-65,25,0))	// 15
+	 // -------------------------------------------------------------
+	 reclist.append(new ResultRecord("I-F",1,1,1,1,0,0,80,0))		// 16
+	 // -------------------------------------------------------------
+	 reclist.append(new ResultRecord("g Na+",0,0,0,3,0,0,1,0))		// 17
+	 // -------------------------------------------------------------
+	 reclist.append(new ResultRecord("range",0,2,0,1,0,0,1,0))		// 18
+	 // -------------------------------------------------------------
+//	 reclist.append(new ResultRecord("initial ISF",0,0,0,3,1,0.0,3,1))	// 19
+//	 reclist.append(new ResultRecord("ISF",0,0,0,4,1,0.0,3,1))		// 20
+//	 reclist.append(new ResultRecord("ISF(t)",0,0,1,6,1,0.0,3,0))	  	// 21 !!! update write_dendrite_...()
+	 // -------------------------------------------------------------
+	 NRECS=reclist.count()
+}
+
+// ========================================================================================
+
+proc reset_records() { local i
+	 for i=0,NRECS-1 {
+	 	 rcrd=reclist.object(i)
+	 	 if (rcrd.constant==0) { rcrd.reset_record() } // reset non-constant records
+	 }
+}
+
+proc read_constant_records() {
+	for i=0,NRECS-1 {
+		rcrd=reclist.object(i)
+		if (rcrd.constant==1) {
+			rcrd.reset_record()
+			rcrd.read_record()
+		}
+	}
+}
+
+proc write_GMAX0_records() {
+	reclist.object(0).write_record()
+}
+
+// ----------------------------------------------------------------------------------------
+
+// return 1 if ALL records where chosen to be deleted
+func delete_run_dependent_records() { local i,all
+	 all=1
+	 for i=0,NRECS-1 {
+	 	 rcrd=reclist.object(i)
+	 	 if (rcrd.recdep==0) {
+	 	 	all*=reclist.object(i).delete_record()
+		 }
+	 }
+	 return all
+}
+
+// return 1 if ALL records where chosen to be deleted
+func delete_run_independent_records() { local i,all
+	 all=1
+	 for i=0,NRECS-1 {
+	 	 rcrd=reclist.object(i)
+	 	 if (rcrd.recdep==1) {
+	 	 	all*=reclist.object(i).delete_record()
+		 }
+	 }
+	 return all
+}
+
+// ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+// arguments: vRECpoints/vRECdt/vRECstart/sfRECpoints/sfRECdt/sfRECstart/mavgRECpoints/mavgRECdt/mavgRECstart
+proc write_dendrite_run_dependent_records() { local i
+	for i=0,NRECS-1 {
+		rcrd=reclist.object(i)
+		if (i!=6 && i!=7 && i!=8 && rcrd.recloc==0 && rcrd.recdep==0) { // run dependent
+			if (i==3) { rcrd.write_record($1,$2,$3)
+			} else if (i==4 || i==21) { 
+				if (SCALE_ENABLE) { rcrd.write_record($4,$5,$6) }
+			} else if (i==5) { rcrd.write_record($7,$8,$9)
+			} else { rcrd.write_record() }
+		 }
+	 }
+}
+
+proc write_soma_run_dependent_records() { local i
+	 for i=0,NRECS-1 {
+	 	 rcrd=reclist.object(i)
+		 if (rcrd.recloc==1 && rcrd.recdep==0) { // run dependent
+		       rcrd.write_record($1,$2,$3,$o4)
+		 }
+	 }
+}
+
+proc write_BPAP_records() { local i
+	 for i=0,NRECS-1 {
+	 	 rcrd=reclist.object(i)
+		 if (rcrd.recdep==1) { // run independent
+		 	if (rcrd.recloc==0 && rcrd.recnum==2) { // dendritic BPAP
+		   	   rcrd.write_record($1,$2,$3)
+			} else { if (rcrd.recloc==1 && rcrd.recnum==0) { // somatic AP
+		 	   rcrd.write_record($1,$2,$3,$o4)
+			}}
+		 }
+	 }
+}
+
+proc write_EPSP_records() { local i
+	 for i=0,NRECS-1 {
+	 	 rcrd=reclist.object(i)
+		 // dendritic, run-independent, numbers 0 and 1
+	 	 if (rcrd.recloc==0 && rcrd.recdep==1 && rcrd.rectype==1 && (rcrd.recnum==0 || rcrd.recnum==1)) {
+			rcrd.write_record($1,$2,$3)
+		 }
+	 }
+}
+
+proc write_EPSP_after_records() { local i
+	 for i=0,NRECS-1 {
+	 	 rcrd=reclist.object(i)
+		 // dendritic, run-dependent, numbers 3 and 4
+	 	 if (rcrd.recloc==0 && rcrd.recdep==0 && rcrd.rectype==1 && (rcrd.recnum==3 || rcrd.recnum==4)) {
+		 	rcrd.write_record($1,$2,$3)
+		 }
+	 }
+}
+
+proc write_EPSC_after_records() { local i
+	 for i=0,NRECS-1 {
+	 	 rcrd=reclist.object(i)
+		 // dendritic, run-dependent, number 5
+	 	 if (rcrd.recloc==0 && rcrd.recdep==0 && rcrd.rectype==1 && rcrd.recnum==5) {
+		 	rcrd.write_record($1,$2,$3)
+		 }
+	 }
+}
+
+proc write_IF_records() { local i
+	 for i=0,NRECS-1 {
+	 	 rcrd=reclist.object(i)
+		 if (rcrd.recdep==1 && rcrd.recloc==1 && rcrd.recnum==1) {
+		 	   rcrd.write_record($1,$2,$3,$o4)
+		 }
+	 }
+}
+

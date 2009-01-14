@@ -1,0 +1,189 @@
+//   Z. F. Mainen and T. J. Sejnowski (1996) Influence of dendritic
+//   structure on firing pattern in model neocortical neurons.
+//   Nature 382: 363-366.
+//	 note: no delayed rectifier on dendrites!
+// ===============================================================================
+
+// parameters
+// ----------
+
+v_init    = -70
+
+celsius   = 37
+
+ra        = 150
+global_ra = ra
+rm        = 30000
+c_m       = 0.75
+cm_myelin = 0.04
+g_pas_node = 0.02
+
+Ek = -90
+Ena = 60
+Eca = 140
+
+// ===============================================================================
+
+// variable defaults
+// -----------------
+
+SGNa = 20
+SVshftNa = -5
+SGKv = 200
+SGCa = 0.3
+SGKm = 0.1
+SGKCa = 3
+SVshftCa = 0
+
+DGNa = SGNa
+DVshftNa = SVshftNa
+DGKv = SGKv
+DGCa = SGCa
+DGKm = SGKm
+DGKCa = SGKCa
+DVshftCa = SVshftCa
+
+AxGNa = 30000
+AxMyGNa = SGNa // myelin
+AxVshftNa = SVshftNa
+AxhtauNa = 1
+AxGKv = 2000 // only at hillock and iseg (otherwise non-existing)
+
+strng="ca_ion"
+sprint(cmd,"ion_style(%s,0,1,0,0,0)",strng)
+// ===============================================================================
+// user access flag; conductance parameter flag; [gui name]; [variable name];
+// ([] - if user access flag==1)
+// variable value; range distribution formula
+
+subtree = new Subtree("Soma",soma_section_list)
+	channel = new Channel("pas")
+		channel.add_parameter(new Channel_Parameter(0,0,"e_pas",v_init,"e_pas=v_init"))
+		channel.add_parameter(new Channel_Parameter(0,1,"g_pas",1/rm,"g_pas=1/rm"))
+		channel.add_parameter(new Channel_Parameter(0,0,"Ra",ra,"Ra=ra"))
+		channel.add_parameter(new Channel_Parameter(0,0,"cm",c_m,"cm=c_m"))
+	subtree.add_channel(channel)
+	channel = new Channel("na_MS")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_na_MS","g Na+ (fast)","SGNa",SGNa,"gbar_na_MS = SGNa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",Ena,"ena=Ena"))
+		channel.add_parameter(new Channel_Parameter(1,0,"vshift_na_MS","Na+ threshold","SVshftNa",SVshftNa,"vshift_na_MS=SVshftNa"))
+	subtree.add_channel(channel)
+	channel = new Channel("kv_MS")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_kv_MS","g K+ (dr)","SGKv",SGKv,"gbar_kv_MS=SGKv"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",Ek,"ek=Ek"))
+	subtree.add_channel(channel)
+	channel = new Channel("km_MS")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_km_MS","g K+ (m)","SGKm",SGKm,"gbar_km_MS=SGKm"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",Ek,"ek=Ek"))
+	subtree.add_channel(channel)
+	channel = new Channel("kca_MS")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_kca_MS","g K+ (Ca)","SGKCa",SGKCa,"gbar_kca_MS=SGKCa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",Ek,"ek=Ek"))
+	subtree.add_channel(channel)
+	channel = new Channel("ca_MS")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_ca_MS","g Ca++","SGCa",SGCa,"gbar_ca_MS=SGCa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"eca",Eca,"eca=Eca cmd"))
+		channel.add_parameter(new Channel_Parameter(1,0,"vshift_ca_MS","Ca+ threshold","SVshftCa",SVshftCa,"vshift_ca_MS=SVshftCa"))
+	subtree.add_channel(channel)
+	channel = new Channel("cad_MS")
+	subtree.add_channel(channel)
+LAYOUT.add_subtree(subtree)
+
+subtree = new Subtree("Dendrite",dendrite_section_list)
+	channel = new Channel("pas")
+		channel.add_parameter(new Channel_Parameter(0,0,"e_pas",v_init,"e_pas=v_init"))
+		channel.add_parameter(new Channel_Parameter(0,1,"g_pas",1/rm,"g_pas=1/rm"))
+		channel.add_parameter(new Channel_Parameter(0,0,"Ra",ra,"Ra=ra"))
+		channel.add_parameter(new Channel_Parameter(0,0,"cm",c_m,"cm=c_m"))
+	subtree.add_channel(channel)
+	channel = new Channel("na_MS")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_na_MS","g Na+ (fast)","DGNa",DGNa,"gbar_na_MS = DGNa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",Ena,"ena=Ena"))
+		channel.add_parameter(new Channel_Parameter(1,0,"vshift_na_MS","Na+ threshold","DVshftNa",DVshftNa,"vshift_na_MS=DVshftNa"))
+	subtree.add_channel(channel)
+	channel = new Channel("km_MS")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_km_MS","g K+ (m)","DGKm",DGKm,"gbar_km_MS=DGKm"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",Ek,"ek=Ek"))
+	subtree.add_channel(channel)
+	channel = new Channel("kca_MS")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_kca_MS","g K+ (Ca)","DGKCa",DGKCa,"gbar_kca_MS=DGKCa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",Ek,"ek=Ek"))
+	subtree.add_channel(channel)
+	channel = new Channel("ca_MS")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_ca_MS","g Ca++","DGCa",DGCa,"gbar_ca_MS=DGCa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"eca",Eca,"eca=Eca cmd"))
+		channel.add_parameter(new Channel_Parameter(1,0,"vshift_ca_MS","Ca+ threshold","DVshftCa",DVshftCa,"vshift_ca_MS=DVshftCa"))
+	subtree.add_channel(channel)
+	channel = new Channel("cad_MS")
+	subtree.add_channel(channel)
+LAYOUT.add_subtree(subtree)
+/*
+subtree = new Subtree("Axon",axon_section_list)
+	channel = new Channel("pas")
+		channel.add_parameter(new Channel_Parameter(0,0,"e_pas",v_init,"e_pas=v_init"))
+		channel.add_parameter(new Channel_Parameter(0,1,"g_pas",1/rm,"g_pas=1/rm"))
+		channel.add_parameter(new Channel_Parameter(0,0,"Ra",ra,"Ra=ra"))
+		channel.add_parameter(new Channel_Parameter(0,0,"cm",c_m,"cm=c_m"))
+	subtree.add_channel(channel)
+	channel = new Channel("na_MS")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_na_MS","g Na+ (fast)","AxGNa",AxGNa,"gbar_na_MS = AxGNa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",Ena,"ena=Ena"))
+		channel.add_parameter(new Channel_Parameter(0,0,"vshift_na_MS",AxVshftNa,"vshift_na_MS=AxVshftNa"))
+	subtree.add_channel(channel)
+	channel = new Channel("kv_MS")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_kv_MS","g K+ (dr)","AxGKv",AxGKv,"gbar_kv_MS=AxGKv"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",Ek,"ek=Ek"))
+	subtree.add_channel(channel)
+LAYOUT.add_subtree(subtree)
+*/
+
+subtree = new Subtree("Axon Hillock and Initial Segment",axon_hill_iseg_section_list)
+	channel = new Channel("pas")
+		channel.add_parameter(new Channel_Parameter(0,0,"e_pas",v_init,"e_pas=v_init"))
+		channel.add_parameter(new Channel_Parameter(0,1,"g_pas",1/rm,"g_pas=1/rm"))
+		channel.add_parameter(new Channel_Parameter(0,0,"Ra",ra,"Ra=ra"))
+		channel.add_parameter(new Channel_Parameter(0,0,"cm",c_m,"cm=c_m"))
+	subtree.add_channel(channel)
+	channel = new Channel("na_MS")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_na_MS","g Na+ (fast)","AxGNa",AxGNa,"gbar_na_MS = AxGNa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",Ena,"ena=Ena"))
+		channel.add_parameter(new Channel_Parameter(1,0,"htau_factor_na_MS","Na+ htau","AxhtauNa",AxhtauNa,"htau_factor_na_MS=AxhtauNa"))
+		channel.add_parameter(new Channel_Parameter(1,0,"vshift_na_MS","Na+ threshold","AxVshftNa",AxVshftNa,"vshift_na_MS=AxVshftNa"))
+	subtree.add_channel(channel)
+	channel = new Channel("kv_MS")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_kv_MS","g K+ (dr)","AxGKv",AxGKv,"gbar_kv_MS=AxGKv"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",Ek,"ek=Ek"))
+	subtree.add_channel(channel)
+LAYOUT.add_subtree(subtree)
+
+subtree = new Subtree("Axon Myelin",axon_myelin_section_list)
+	channel = new Channel("pas")
+		channel.add_parameter(new Channel_Parameter(0,0,"e_pas",v_init,"e_pas=v_init"))
+		channel.add_parameter(new Channel_Parameter(0,1,"g_pas",1/rm,"g_pas=1/rm"))
+		channel.add_parameter(new Channel_Parameter(0,0,"Ra",ra,"Ra=ra"))
+		channel.add_parameter(new Channel_Parameter(0,0,"cm",cm_myelin,"cm = cm_myelin"))
+	subtree.add_channel(channel)
+	channel = new Channel("na_MS")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_na_MS","g Na+ (fast)","AxMyGNa",AxMyGNa,"gbar_na_MS = AxMyGNa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",Ena,"ena=Ena"))
+		channel.add_parameter(new Channel_Parameter(0,0,"vshift_na_MS",AxVshftNa,"vshift_na_MS=AxVshftNa"))
+	subtree.add_channel(channel)
+LAYOUT.add_subtree(subtree)
+
+subtree = new Subtree("Axon Nodes of Ranvier",axon_node_section_list)
+	channel = new Channel("pas")
+		channel.add_parameter(new Channel_Parameter(0,0,"e_pas",v_init,"e_pas=v_init"))
+		channel.add_parameter(new Channel_Parameter(0,1,"g_pas",g_pas_node,"g_pas = g_pas_node"))
+		channel.add_parameter(new Channel_Parameter(0,0,"Ra",ra,"Ra=ra"))
+		channel.add_parameter(new Channel_Parameter(0,0,"cm",c_m,"cm=c_m"))
+	subtree.add_channel(channel)
+	channel = new Channel("na_MS")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_na_MS","g Na+ (fast)","AxGNa",AxGNa,"gbar_na_MS = AxGNa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",Ena,"ena=Ena"))
+		channel.add_parameter(new Channel_Parameter(0,0,"vshift_na_MS",AxVshftNa,"vshift_na_MS=AxVshftNa"))
+	subtree.add_channel(channel)
+LAYOUT.add_subtree(subtree)
+
+
+// --------------------------------------------------------------------------------------
+

@@ -1,0 +1,28 @@
+// Loads all variables, templates and procedures
+// =============================================
+
+xopen("../cells/cell.hoc")				// prepare model cell: morphology and channels
+xopen("../data_structure/templates.hoc")		// templates for logical synapse, branch, sections and whole tree
+xopen("../data_structure/sections.hoc")			// create tree corresponding to the morphology
+xopen("../data_structure/vertical_distance.hoc")	// calculate segment midpoint coordinates and vertical distance to soma
+xopen("../synapses/synapses.hoc")			// create the logical synapses which are an elementary unit
+xopen("../records/records.hoc")				// template for records and record management procedures
+xopen("../simulations/simulation.hoc")			// manages the simulation initialization and user parameter settings
+xopen("../records/configurations.hoc")			// manages the configurations of RIPs and RDPs
+xopen("../gui/plots.hoc")				// template for graphing and shape plot procedures
+xopen("../gui/control.hoc")				// control panel and simulation manager
+
+// simulations
+// -----------
+xopen("../simulations/protocols/artificial_vivo.hoc") 	// regular uniform in vivo simulation
+xopen("../simulations/protocols/EPSP.hoc")
+xopen("../simulations/protocols/EPSC.hoc")
+xopen("../simulations/protocols/EPSP_check.hoc")
+xopen("../simulations/protocols/EPSC_check.hoc")
+xopen("../simulations/protocols/BPAP_check.hoc")
+xopen("../simulations/protocols/resistance.hoc")
+xopen("../simulations/protocols/train_check.hoc")
+xopen("../simulations/protocols/BPAP.hoc")
+xopen("../simulations/protocols/IF.hoc")
+xopen("../simulations/protocols/2point.hoc")
+

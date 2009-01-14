@@ -1,0 +1,1131 @@
+/* Create seperate lists for dendrites (basal and apical), soma and axon
+   sections for each morphology file */
+
+// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+
+begintemplate Morph
+
+public name
+public full_name
+public filename
+public dend_name
+public dend_basal_name
+public numbasal
+public dend_apical_name
+public numapical
+public soma_name
+public axon_name
+public origin_name
+public trunk_criterion // number of branches a trunk section must appear in
+
+objref dend_basal_name,dend_apical_name
+objref dend_name,soma_name,axon_name
+strdef name,full_name,filename,origin_name
+
+proc init() { local i,j
+	 name=$s1
+	 full_name=$s2
+	 sprint(filename,"../cells/morphologies/%s",$s3)
+	 origin_name=$s4
+	 soma_name=new List() // for future 'or' enabling
+	 soma_name.append(new String($s5))
+	 axon_name=new List()
+	 axon_name.append(new String($s6))
+	 dend_name=new List()
+	 dend_name.append(new String($s7))
+	 numbasal=$8
+	 i=8
+	 dend_basal_name=new List()
+	 for j=0,numbasal-1 {
+	 	 i+=1
+	 	 dend_basal_name.append(new String($si))
+	 }
+	 i+=1
+	 numapical=$i
+	 dend_apical_name=new List()
+	 for j=0,numapical-1 {
+	 	 i+=1
+	 	 dend_apical_name.append(new String($si))
+	 }
+	 i+=1
+	 trunk_criterion=$i
+}
+endtemplate Morph
+
+// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+
+begintemplate Channel_Parameter
+
+public param_name
+public name
+public selsec_prefix
+public var_name				   // name of the global variable used in the control and in the parameter files
+//public asgn_name			   // name used when assigning the paramter with a value
+public var_value			   // value for the parameter
+public default_var_value	   // default value
+public user_access			   // 0=no user access (usually whole cell parameters); 1=user access
+public type				// 0=other; 1=conductance; 2=membrane parameter
+public assignment 			   // expression for paramter value assignment as a function of distance from soma
+public x1,x2,c1,c2,c3			// in case the assignment is a function, the arguments are kept here
+public xs1, xs2
+public arguments	// string containing all relvant arguments to initiate an instance of this template
+public selsec_private_varnames	// for each selected section the variable names must be distinguishable 
+
+external selsec
+
+strdef name,var_name,asgn_name,default_value
+strdef param_name,assignment, xs1, xs2, c1, c2, c3
+strdef cmd, arguments, selsec_prefix
+
+proc init() { local n
+	selsec_prefix = ""
+	n = numarg()
+	user_access=$1
+	type=$2
+	param_name=$s3
+	sprint(arguments,"%d,%d,param.param_name",user_access,type)
+	if (user_access==0) { // no user access (usually a parameter affecting entire cell)
+		name=""
+		var_name=""
+		var_value=$4
+		assignment=$s5
+		sprint(arguments,"%s,param.var_value,param.assignment",arguments)
+	} else { // user access
+		name=$s4
+		var_name=$s5
+		var_value=$6
+		assignment=$s7
+		sprint(arguments,"%s,param.name,param.var_name,param.var_value,param.assignment",arguments)
+		if (n > 7) {
+			x1type = argtype(8) 
+			if (x1type == 0) {
+				x1 = $8
+				sprint(xs1,"%g",x1)
+			} else if (x1type == 2) {
+				xs1 = $s8
+			}
+			x2type = argtype(9) 
+			if (x2type == 0) {
+				x2 = $9
+				sprint(xs2,"%g",x2)
+			} else if (x2type == 2) {
+				xs2 = $s9
+			}
+			c1 = $s10
+			c2 = $s11
+			c3 = $s12
+			sprint(arguments,"%s, param.xs1, param.xs2, param.c1, param.c2, param.c3",arguments)
+		}
+	}
+	default_var_value=var_value
+}
+
+proc selsec_private_varnames() {
+	selsec.sec selsec_prefix = secname()
+	sprint(selsec_prefix, "%s_", selsec_prefix)
+	if (user_access) {
+		sprint(var_name,"%s%s",selsec_prefix, var_name)
+		sprint(cmd,"%s = %g",var_name,var_value)
+		execute(cmd)
+	}
+}
+
+endtemplate Channel_Parameter
+
+// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+
+begintemplate Channel
+
+public name
+public numparams
+public paramlist
+public add_parameter
+public inserted
+public conductance_id
+
+objref paramlist
+strdef name
+
+proc init() {
+	 name=$s1
+	 numparams=0
+	 paramlist=new List()
+	 inserted=0
+	 conductance_id=-1	 // the parameter id that represents channel's conductance
+}
+
+proc add_parameter() {
+	 paramlist.append($o1)
+//	 if (paramlist.object(numparams).conductance && paramlist.object(numparams).user_access) {
+	 if (paramlist.object(numparams).type==1) { // conductance
+	 	conductance_id=numparams
+	 }
+	 numparams+=1
+}
+
+endtemplate Channel
+
+// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+
+begintemplate Subtree
+
+public name
+public sec_list
+public secref
+public numchannels
+public channlist
+public add_channel
+public sign	// -1=basal; 1=apical
+public parent_subtree	// just for selsec
+public selsec_subtree_destroy
+
+objref channlist,channel,sec_list, secref, str, parent_subtree
+strdef name
+
+proc init() { local strcheck, n
+	n = numarg()
+	 // subtree name; reference to its section list; pairs of: ion,current
+	str=new StringFunctions()
+	sec_list=new SectionList()
+	if (n == 1) { // seclist subtree
+		parent_subtree = $o1
+		name = parent_subtree.name
+		secref = new SectionRef()
+		sec_list.append()
+		parent_subtree.sec_list.remove()
+	} else if (n == 2) { // regular subtree
+		name=$s1
+		sec_list=$o2
+	}
+	sign=check_sign()	// check if this happens to be a basal subtree
+	numchannels=0
+	channlist=new List()
+}
+
+proc add_channel() {
+	 channel=$o1
+	 channlist.append(channel)
+	 numchannels+=1
+}
+
+func check_sign() {
+	strcheck=str.substr(name,"basal")
+	if (strcheck==-1) { strcheck=str.substr(name,"Basal")
+	} else { return -1 }
+	if (strcheck==-1) { strcheck=str.substr(name,"BASAL")
+	} else { return -1 }
+	if (strcheck==-1) { return 1
+	} else { return -1 }
+}
+
+proc selsec_subtree_destroy() {
+	secref.sec parent_subtree.sec_list.append()
+}
+
+endtemplate Subtree
+
+// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+
+begintemplate Channel_Layout
+
+public name
+public full_name
+public filename
+public numsubtrees
+public subtree_list
+public add_subtree
+public loaded
+public g_pas_name
+public e_pas_name
+public current_names
+public ion_names
+public numions
+public axon_type
+
+objref subtree_list,subtree
+objref current_names,ion_names
+strdef name,full_name,filename
+strdef g_pas_name,e_pas_name
+
+proc init() { local n,last,j,i
+	 n=numarg()
+	 name=$s1
+	 full_name=$s2
+	 sprint(filename,"../cells/channels/%s",$s3)
+	 g_pas_name=$s4
+	 e_pas_name=$s5
+	 axon_type=$6
+	 last=6 // last argument number before ions and currents
+	 numions=(n-last)/2
+	 current_names=new List()
+	 ion_names=new List()
+	 for j=0,numions-1 {
+	 	 i=last+2*j+1
+		 ion_names.append(new String($si))
+		 i+=1
+		 current_names.append(new String($si))
+	 }
+	 subtree_list=new List()
+	 numsubtrees=0
+	 loaded=0 // channel file not loaded
+}
+
+proc add_subtree() {
+	 subtree=$o1
+	 subtree_list.append(subtree)
+	 numsubtrees+=1
+}
+
+
+proc print_to_file() {
+}
+
+endtemplate Channel_Layout
+
+// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+// Morphology file specific section names
+// ----------------------------------------------------------------------------------
+
+proc prepare_morphlist() {
+	 // name; display name; file name; origin; soma; axon; dendrite; num of basal names; basals; num apical names; apicals; trunk criterion
+	 // (trunk criterion: number of branches a section appears in in order to count as belonging to a trunk)
+	 morphlist=new List()
+	 morphlist.append(new Morph("cable","Cable","cable.hoc","soma","soma","XX",".*dend.*",0,1,".*dend.*",0))
+	 morphlist.append(new Morph("ri04","Spruston1","ri04.nrn","somaA",".*soma.*",".*axon.*",".*dend.*",3,".*dendA1.*",".*dendA2.*",".*dendA3.*",2,".*dendA4.*",".*dendA5.*",13))
+	 morphlist.append(new Morph("ri05","Spruston 2","ri05.nrn","somaA",".*soma.*",".*axon.*",".*dend.*",3,".*dendA1.*",".*dendA2.*",".*dendA3.*",1,".*dendA4.*",13))
+	 morphlist.append(new Morph("ri06","Spruston 3","ri06.nrn","somaA",".*soma.*",".*axon.*",".*dend.*",4,".*dendA1.*",".*dendA2.*",".*dendA3.*",".*dendA4.*",1,".*dendA5.*",10))
+	 morphlist.append(new Morph("Purk-vetter1","Purkinje V1","Purk-vetter1.hoc","soma","soma",".*axon.*",".*dend.*",0,1,".*dend.*",10))
+//	 morphlist.append(new Morph("n160","Gasparini","n160.nrn","soma[5]",".*soma.*",".*axon.*",".*al.*",1,".*basal.*",1,".*apical.*",13))
+	 morphlist.append(new Morph("n400","Seminar","n400ns_su133_07.hoc","soma[2]",".*soma.*",".*axon.*",".*dend.*",0,1,".*dend.*",13))
+//	 morphlist.append(new Morph("n160","Haifa","n160_mod.nrn","soma[2]",".*soma.*",".*axon.*",".*al.*",1,".*basal.*",1,".*apical.*",13))
+	 morphlist.append(new Morph("602c","Roth 1","602c.hoc","soma",".*soma.*",".*axon.*",".*dend.*",0,1,".*dend.*",13))
+	 morphlist.append(new Morph("822","Roth 2","822.hoc","soma",".*soma.*",".*axon.*",".*dend.*",0,1,".*dend.*",5))
+	 morphlist.append(new Morph("913c","Roth 3","913c.hoc","soma",".*soma.*",".*axon.*",".*dend.*",0,1,".*dend.*",11))
+	 morphlist.append(new Morph("n123","Poirazi","n123.hoc","soma","soma",".*axon.*",".*dend.*",0,1,".*dend.*",13))
+	 morph_select(SLCT_MORPH)
+}
+
+proc prepare_layoutlist() {
+	 layoutlist=new List()
+	 layoutlist.append(new Channel_Layout("Cable","Cable","cable.hoc","g_pas","e_pas",0,"na_ion","ina","k_ion","ik"))
+//	 layoutlist.append(new Channel_Layout("Gasparini","Gasparini et al. 2005","Gasparini.hoc","g_pas","e_pas",1,"na_ion","ina","k_ion","ik","hd_G","i_hd_G"))
+	 layoutlist.append(new Channel_Layout("Migliore2","Migliore et al.","Migliore_modified.hoc","g_pas","e_pas",1,"na_ion","ina","k_ion","ik","hd_G","i_hd_G"))
+//	 layoutlist.append(new Channel_Layout("Haifa","Haifa (Migliore)","Haifa.hoc","g_pas","e_pas",1,"na_ion","ina","k_ion","ik"))
+//	 layoutlist.append(new Channel_Layout("Poirazi","Poirazi","Poirazi.hoc","gl_hha2_P","el_hha2_P",1,"ca_ion","ica","Ca_ion","iCa","k_ion","ik","na_ion","ina"))
+//	 layoutlist.append(new Channel_Layout("Migliore","Migliore","Migliore.hoc","g_pas","e_pas",1,"na_ion","ina","k_ion","ik","hd_M","i_hd_M"))
+//	 layoutlist.append(new Channel_Layout("Migliore_iso","Migliore ISO","Migliore_iso.hoc","g_pas","e_pas",1,"na_ion","ina","k_ion","ik"))
+//	 layoutlist.append(new Channel_Layout("Vetter","Vetter et al. 2001","Vetter.hoc","g_pas","e_pas",1,"na_ion","ina","k_ion","ik"))
+//	 layoutlist.append(new Channel_Layout("Mainen","Mainen & Sejnowski","Mainen.hoc","g_pas","e_pas",2,"na_ion","ina","k_ion","ik","ca_ion","ica"))
+//	 layoutlist.append(new Channel_Layout("Golding","Golding et al. 2001","Golding.hoc","g_pas","e_pas",2,"na_ion","ina","k_ion","ik"))
+//	 layoutlist.append(new Channel_Layout("Golding3","3Golding et al. 2001","Golding3.hoc","g_pas","e_pas",3,"na_ion","ina","k_ion","ik"))
+//	 layoutlist.append(new Channel_Layout("Scale","Scaling","Scale.hoc","g_pas","e_pas",1,"na_ion","ina","k_ion","ik"))
+	 layout_select(SLCT_LAYOUT)
+}
+
+proc channel_write_parameters() { local i,j,k
+	 pfile=$o1
+	 for i=0,LAYOUT.numsubtrees-1 {
+	 	 subtree=LAYOUT.subtree_list.object(i)
+		 for j=0,subtree.numchannels-1 {
+		 	 channel=subtree.channlist.object(j)
+			 for k=0,channel.numparams-1 {
+			 	 param=channel.paramlist.object(k)
+				 if (param.user_access) {
+				 	pfile.printf("%s=%g\n",param.var_name,param.var_value)
+				 }
+			 }
+		 }
+	 }
+}
+
+// called from simulation.hoc
+proc current_balance() { local i,j
+	current_sum=0
+	finitialize($1)
+	fcurrent()
+	for i=0,LAYOUT.numsubtrees-1 {
+		subtree_balance(LAYOUT.subtree_list.object(i))
+	}
+	for i = 0, NSELSECS-1 {
+		subtree_balance(selsec_subtree_list.object(i))
+	}
+}
+
+proc subtree_balance() {
+	subtree = $o1
+	forsec subtree.sec_list { // loop subtree sections
+		for (x,0) {
+			sprint(cmd,"current_sum = %s(x)*v(x)",LAYOUT.g_pas_name)
+			execute(cmd)
+			for j=0,LAYOUT.numions-1 {
+				if (ismembrane(LAYOUT.ion_names.object(j).s)) {
+					sprint(cmd,"current_sum += %s(x)",LAYOUT.current_names.object(j).s)
+					execute(cmd)
+				}
+			}
+			sprint(cmd,"%s(x) = current_sum / %s(x)",LAYOUT.e_pas_name,LAYOUT.g_pas_name)
+			execute(cmd)
+			fcurrent()
+		}
+	}
+}
+// =====================================================================
+
+proc subtree_channel_update() { local j, k, id, g
+	subtree = $o1
+	for j=0,subtree.numchannels-1 { // loop subtree channels
+		channel=subtree.channlist.object(j)
+		// update user accessible variable values
+		for k=0,channel.numparams-1 {
+	 		param=channel.paramlist.object(k)
+			if (param.user_access) {
+				sprint(cmd,"param.var_value=%s",param.var_name)
+				execute(cmd)
+			}
+		}
+		// if conductance of a channel <= 0, uninsert it and if it was <=0 and now is >0, re-insert it
+		id=channel.conductance_id // conductance parameter id
+		if (id>=0) { // if this channel has a conductance parameter (just in case...)
+			g=channel.paramlist.object(id).var_value
+			// if conductance is zero or smaller and channel is inserted, uninsert it
+			if (channel.inserted && g<=0) {
+				forsec subtree.sec_list { // loop subtree sections
+					sprint(cmd,"uninsert %s",channel.name)
+					execute(cmd)
+				}
+				channel.inserted=0
+			} else if (!channel.inserted && g>0) {
+				forsec subtree.sec_list { // loop subtree sections
+					sprint(cmd,"insert %s",channel.name)
+					execute(cmd)
+					// update all non-user access paramters
+					for k=0,channel.numparams-1 {
+						param=channel.paramlist.object(k)
+						if (!param.user_access) {
+							execute(param.assignment)
+						}
+					}
+				}
+				channel.inserted=1
+			}
+		}
+		// update user accessible parameters
+		if (channel.inserted) {
+			for k=0,channel.numparams-1 {
+				param=channel.paramlist.object(k)
+				if (param.user_access) {
+					forsec subtree.sec_list { // loop subtree sections
+							execute(param.assignment)
+					}
+				}
+			}
+		}
+	}
+}
+
+proc subtree_channel_restore() { local j, k
+	subtree = $o1
+	for j=0,subtree.numchannels-1 { // loop subtree channels
+		channel=subtree.channlist.object(j)
+		// update user accessible variable values
+		for k=0,channel.numparams-1 {
+			param=channel.paramlist.object(k)
+			if (param.user_access) {
+				sprint(cmd,"%s=param.var_value",param.var_name)
+				execute(cmd)
+			}
+		}
+	}
+}
+
+proc channel_update_parameters() { local ok, i
+	if (!LAYOUT.loaded) {
+		xopen(LAYOUT.filename)
+		LAYOUT.loaded=1
+	}
+	ok=$1
+	if (ok) {
+		UNBALANCED=1 // flag signaling that cell may be unbalanced and will be balanced upon simulation run
+		for i = 0, LAYOUT.numsubtrees-1 { // loop subtrees
+			subtree=LAYOUT.subtree_list.object(i)
+			subtree_channel_update(subtree)
+		}	
+	} else {
+		for i=0,LAYOUT.numsubtrees-1 { // loop subtrees
+			subtree=LAYOUT.subtree_list.object(i)
+			subtree_channel_restore(subtree)
+		}
+	}
+}
+
+// ===================================================================================
+
+proc channel_reset_all() { local i,j,k,ok,command,type,go
+	ok=$1 // regularly gets either 0 or 1 from RIP/RDP check; 2 signals initial default reset
+	if (ok) {
+		command=$2 // 1=default; 2=zero
+		type=$3 // 1=conductance; 2=memebrane
+		if (ok!=2) {
+			dbox=new VBox()
+			go=dbox.dialog("Are you sure you want to reset ALL channel parameters?","Yes","No")
+		} else { go=1 } // read_default_parameters() in configuration.hoc
+		if (go) {
+			for i=0,LAYOUT.numsubtrees-1 {
+				subtree=LAYOUT.subtree_list.object(i)
+				for j=0,subtree.numchannels-1 {
+					channel=subtree.channlist.object(j)
+					for k=0,channel.numparams-1 {
+						param=channel.paramlist.object(k)
+						if (param.user_access && param.type==type) { // conductance/membrane
+							if (command==1) { param.var_value=param.default_var_value
+							} else if (command==2) { param.var_value=0 }
+							sprint(cmd,"%s=param.var_value",param.var_name)
+							execute(cmd)
+						}
+			 		}
+		 		}
+	 		}
+	 		channel_update_parameters(1)
+		}
+	}
+}
+
+proc channel_reset() { local ok,command
+	ok=$1
+	if (ok) {
+		param=$o2
+		command=$3 // type: 1=reset to default value; 2=reset to zero
+		if (param.user_access) {
+			if (command==1) { param.var_value=param.default_var_value
+			} else if (command==2) { param.var_value=0 }
+			sprint(cmd,"%s=param.var_value",param.var_name)
+			execute(cmd)
+		}
+	 	channel_update_parameters(1)
+	}
+}
+
+// plot all channel conductances of a section list
+proc scan_subtree_channels() { local j, k, erase, type
+	erase = $1
+	type = $2	// conductance: 1 = density; 0 = kinematics
+	subtree = $o3
+	if (erase) { graphItem.erase_all() }
+	xmax=0
+	xmin=0
+	ymax=0
+	for j=0,subtree.numchannels-1 {
+		channel=subtree.channlist.object(j)
+		if (channel.inserted) {
+			for k=0,channel.numparams-1 {
+				param=channel.paramlist.object(k)
+				if (param.user_access && param.type==type) {
+					plot_subtree_channels(param.name,param.param_name,subtree.sec_list,subtree.sign,j+1) // plots.hoc
+				}
+			}
+		}
+	}
+//	graphItem.exec_menu("View = plot")
+//	graphItem.size(0,xmax,0,ymax*1.5)
+	graphItem.size(-300,900,0,ymax*1.1)
+}
+
+proc plot_tree() { local i, type
+	type = $1
+	graphItem.erase_all()
+	for i=0,LAYOUT.numsubtrees-1 {
+		subtree=LAYOUT.subtree_list.object(i)
+		scan_subtree_channels(0, type, subtree) // don't erase the graph, plot subtree over subtree
+	}
+	for i=0,NSELSECS-1 {
+		subtree=selsec_subtree_list.object(i)
+		scan_subtree_channels(0, type, subtree) // don't erase the graph, plot subtree over subtree
+	}
+}
+
+proc channel_conductance_control_panel() { local i, j, k
+	ch1box=new VBox()
+	ch1box.intercept(1)
+	xpanel("Buttons",1)
+	xbutton("all default","channel_reset_all(RIP_check(),1,1)")
+	xbutton("all zero","channel_reset_all(RIP_check(),2,1)")
+	xbutton("plot g","plot_tree(1)")
+	xbutton("plot kinematics","plot_tree(0)")
+	xpanel()	
+	xpanel("Fields")
+	for i=0, LAYOUT.numsubtrees-1 {
+		subtree = LAYOUT.subtree_list.object(i)
+		xlabel(subtree.name)
+		for j=0, subtree.numchannels-1 {
+			channel=subtree.channlist.object(j)
+			for k=0, channel.numparams-1 {
+				 param=channel.paramlist.object(k)
+				 if (param.user_access && param.type!=2) { // not a membrane parameter
+					xvalue(param.name,param.var_name,1,"channel_update_parameters(RIP_check())")
+				}
+			}
+		}
+	}
+	xpanel()
+	ch1box.intercept(0)
+	ch1box.map("Channel Conductances")
+}
+
+// basal dendrite symmetry option for "Migliore" means that it has the same non-uniform channel distribution as the apical tree
+proc membrane_properties_control_panel() { local i,j,k,check
+	ch2box=new VBox()
+	ch2box.intercept(1)
+	strdef cmd0
+	xpanel("Buttons",1)
+	xbutton("all default","channel_reset_all(RIP_check(),1,2)")
+	xbutton("all zero","channel_reset_all(RIP_check(),2,2)")
+	xpanel()
+	xpanel("Fields")
+	for i=0,LAYOUT.numsubtrees-1 {
+		subtree=LAYOUT.subtree_list.object(i)
+		xlabel(subtree.name)
+		check = 0
+		for j=0,subtree.numchannels-1 {
+			channel=subtree.channlist.object(j)
+			for k=0,channel.numparams-1 {
+				 param=channel.paramlist.object(k)
+				 if (param.user_access && param.type==2) { // membrane parameter
+					xvalue(param.name,param.var_name,1,"channel_update_parameters(RIP_check())")
+					check += 1
+				 }
+			}
+		}
+		if (!check) { xlabel("  No membrane parameters") }
+	}
+	xpanel()
+	ch2box.intercept(0)
+	ch2box.map("Membrane Properties")
+}
+// ===================================================================================
+// create section lists
+// --------------------
+proc create_section_lists() { local i
+	xopen(MORPH.filename)
+	ORIGIN_NAME=MORPH.origin_name
+	sprint(cmd,"../cells/axons/axon%d.hoc",LAYOUT.axon_type)
+	xopen(cmd)
+	create_axon()
+	dAREA=0
+	dLENG=0
+	dNSEC=0
+	dNSEG=0
+	dMAXDIST=0
+	NUMSPINES=NSYNS		// assume a spine for each synapse
+	dendrite_section_list=new SectionList()
+	dendrite_basal_section_list=new SectionList()
+	dendrite_apical_section_list=new SectionList()
+	soma_section_list=new SectionList()
+	axon_section_list=new SectionList()
+	strdef scname
+	scname=MORPH.dend_name.object(0).s
+	forsec scname {
+		dendrite_section_list.append()
+		nseg = int(L/SEGLEN)+1	// default, additional segmentation in section_segmentation() based on Distribution in synapses.hoc
+	  	dLENG+=L
+	  	dNSEC+=1
+	  	for (x,0) {
+			dAREA+=area(x)
+		}
+   	}
+	 for i=0,MORPH.numbasal-1 {
+	 	scname=MORPH.dend_basal_name.object(i).s
+	 	forsec scname { dendrite_basal_section_list.append() }
+	 }
+	 for i=0,MORPH.numapical-1 {
+	 	 scname=MORPH.dend_apical_name.object(i).s
+	 	 forsec scname { dendrite_apical_section_list.append() }
+	 }
+	 scname=MORPH.soma_name.object(0).s
+	 forsec scname { soma_section_list.append() }
+	 // axon lists are defined in axon.hoc (axon section name remains for now in MORPH)
+   	 scname=MORPH.axon_name.object(0).s
+	 forsec scname { axon_section_list.append() }
+   	 sprint(cmd,"access %s",ORIGIN_NAME)
+   	 execute(cmd)
+   	 distance()
+	 SPIKE=new Spike(0.5)
+}
+
+// special additional segmentation of sections (called from main.hoc)
+proc section_segmentation() { local xdist
+	execute(DISTRIB.special_cmd)	// additional special segmentation synapses.hoc
+	// appending section lists changes tree, so a distance() intialization is required
+	sprint(cmd,"%s distance()",ORIGIN_NAME)
+	execute(cmd)
+	forsec dendrite_section_list {
+		dNSEG += nseg
+	  	for (x,0) {
+			xdist=distance(x)
+			if (xdist>dMAXDIST) { dMAXDIST=xdist }
+		}
+	}
+}
+
+// prepare vector of NLEAFSEC longest sections
+proc sort_leafsecs() { local i
+	secL = new Vector()
+	leafsec_section_list = new SectionList()
+	for i = 0, tree.numbranch-1 {
+		branch = tree.branchlist.object(i)
+		branch.last_section.sec secL.append(L)
+	}
+	secLsorti = new Vector()
+	secL.sortindex(secLsorti)
+	if (secLsorti.size > NLEAFSECS) {
+		secLsorti.remove(0, tree.numbranch-1 - NLEAFSECS) // leave longest NLEAFSECS sections
+	}
+	for i = 0, NLEAFSECS-1 {
+		branch = tree.branchlist.object(secLsorti.x(i))
+		branch.last_node.long_leafsec = 1	// mark this node as belonging to a  long leafsec
+	}
+}
+
+// additional section lists that take branch structure into consideration (e.g. apical trunk)
+proc branch_dependent_section_lists() { local i,j,nmbrnch
+	criterion=$1 // criterion for number of branches a section appears in to count as a trunk
+	dendrite_apical_trunk_section_list=new SectionList()
+	dendrite_apical_obliques_section_list=new SectionList()
+	str=new StringFunctions()
+	strdef s1,s2
+	for i=0,nodelist.count()-1 {
+		nodelist.object(i).sec.sec {
+			nmbrnch=nodelist.object(i).branchlist.count()
+			// check to see if this is the apical tree 
+			for j=0,MORPH.numapical-1 {
+				scname=MORPH.dend_apical_name.object(j).s
+				// check if section belongs to apical tree
+				ifsec scname {
+				// if a section appears in more than 'criterion' branches, then it belongs to the trunk
+					if (nmbrnch>criterion) {
+						dendrite_apical_trunk_section_list.append()
+						nodelist.object(i).main_trunk=1 // update node
+					} // the oblique sections are to be arranged in a specific order: trunk-oblique_connection()
+					break // a match has been found, no need to continue checking other possible apical dendrite names
+				}
+			}
+		}
+	 }
+	 trunk_oblique_connection()
+}
+
+proc trunk_oblique_connection() { local loc
+	 tcs=new List() // trunk connection section
+	 tcl=new Vector() // trunk connection location
+	 tcd=new Vector() // trunk connection distance
+	 forsec dendrite_apical_trunk_section_list { // for each trunk section
+	 	secref=new SectionRef() // mark current section
+		child_list=new SectionList()
+		child_list.children() // list its child sections
+		child_list.remove(dendrite_apical_trunk_section_list) // remove the child section that is the continuation of the trunk
+		forsec child_list { // now scan the oblique roots
+			loc=parent_connection() // note connection point x location
+			dist=distance(section_orientation()) // note distance from soma at connection point
+			temp_section_list=new SectionList()
+			temp_section_list.subtree() // list all oblique sections from this root
+			forsec temp_section_list {
+				dendrite_apical_obliques_section_list.append() // append them to the oblique list
+				tcs.append(secref)
+				tcl.append(loc)
+				tcd.append(dist)
+			}
+		}
+	 }
+}
+
+proc correct_SPINEAREA() { local ok
+	 ok=$1
+	 if (ok) {
+//	 print "spine correction under construction"
+	 } else { SPINEAREA=copySPINEAREA }
+}
+
+// ===================================================================================
+
+proc cell_cfg() { local answer
+	 if (CELL_CFG) {
+	 	strdef question
+		question="Cell configuration will no longer be modifiable. Proceed?"
+	 	dbox=new HBox()
+	 	answer=dbox.dialog(question,"yes","no")
+		if (answer) {
+			cellbox.unmap()
+		   CELL_CFG=0
+		   sprint(CELL,"%s-%s-%s-%d-%d",MORPH.name,LAYOUT.name,DISTRIB.name,SYNINT,SEGLEN)
+		   if (SLCT_DISTRIB == 4) {
+			sprint(CELL, "%s-%d-%d", CELL, SEGLEN2, NLEAFSECS)
+		}	
+	 	sprint(celldir,"../records/files/%s",CELL)
+		sprint(sys,"mkdir -p %s",celldir)
+		system(sys)
+		   cellfile=new File()
+		   cellfile.wopen("../main/defaults/cell-default.hoc")
+		   cellfile.printf("// cell DEFAULT Parameters\n")
+		   cellfile.printf("// =======================\n\n")
+		   cellfile.printf("SLCT_MORPH = %d\n",SLCT_MORPH)
+		   cellfile.printf("SLCT_LAYOUT = %d\n",SLCT_LAYOUT)
+		   cellfile.printf("SLCT_DISTRIB = %d\n",SLCT_DISTRIB)
+		   cellfile.printf("SYNINT = %d\n",SYNINT)
+		   cellfile.printf("SEGLEN = %d\n",SEGLEN)
+		   cellfile.printf("SEGLEN2 = %d\n",SEGLEN2)
+		   cellfile.printf("NLEAFSECS = %d\n",NLEAFSECS)
+		   cellfile.close()
+		   distrib_load_file() // synapse.hoc
+		   proceed()
+		}
+	 } else {
+	    strdef notice
+		notice="Cell configuration may no longer be changed!"
+		dbox=new HBox()
+		dbox.dialog(notice)
+	 }
+}
+
+// ===================================================================================
+proc axon_connection() { local ok
+	ok=$1
+	if (ok) {
+		if (AXON_ATTACH && !AXON_ATTACHED) {
+			axon_attach()
+			AXON_ATTACHED=1
+		} else if (!AXON_ATTACH && AXON_ATTACHED) {
+			axon_detach()
+			AXON_ATTACHED=0
+		}
+		copyAXON_ATTACH=AXON_ATTACH
+		sprint(cmd,"%s distance()",ORIGIN_NAME)
+		execute(cmd)
+	} else { AXON_ATTACH=copyAXON_ATTACH }
+}
+
+// ===================================================================================
+
+proc morph_select() {
+	 if (CELL_CFG) {
+	 	SLCT_MORPH=$1
+	 	MORPH=morphlist.object(SLCT_MORPH)
+	 } else {
+	    morphlist.select(SLCT_MORPH)
+	 }
+}
+
+proc layout_select() {
+	 if (CELL_CFG) {
+	 	SLCT_LAYOUT=$1
+	 	LAYOUT=layoutlist.object(SLCT_LAYOUT)
+	 } else {
+	    layoutlist.select(SLCT_LAYOUT)
+	 }
+}
+
+proc SYNINT_select() {
+	 if (!CELL_CFG) {
+	 	SYNINT=copySYNINT
+	 } else {
+	    copySYNINT=SYNINT
+	 }
+}
+
+proc SEGLEN_select() {
+	 if (!CELL_CFG) {
+	 	SEGLEN=copySEGLEN
+	 } else {
+	    copySEGLEN=SEGLEN
+	 }
+}
+
+proc SEGLEN2_select() {
+	 if (!CELL_CFG) {
+	 	SEGLEN2=copySEGLEN2
+	 } else {
+	    copySEGLEN2=SEGLEN2
+	 }
+}
+
+proc NLEAFSECS_select() {
+	 if (!CELL_CFG) {
+	 	NLEAFSECS=copyNLEAFSECS
+	 } else {
+	    copyNLEAFSECS=NLEAFSECS
+	 }
+}
+
+// ==========================================================================
+// ==========================================================================
+
+// selected sections list
+proc prepare_selsec_list() {
+	NSELSECS = 0
+	selsecparambox=new VBox()
+	selsec_list=new List()				// selsec name list for browser
+	selsec_section_list=new SectionList()		// SectionList of selsecs
+	selsec_subtree_list = new List()		// each selsec is considered as a subtree copied from its parent subtree
+	str_selsec = "Select a Section"
+}
+
+// ---------------------------------------------------------------------------------
+
+// delete the list for a newly selected RDP
+proc clear_selsecs() { local i, total
+	if (NSELSECS) {
+		total = NSELSECS
+		for i = 1, total {
+			select_selsec(total-i)
+			remove_selsec(1)
+			str_selsec = "Select a Section"
+		}
+	}
+}
+
+proc user_clear_selsecs() { local ok, response
+	ok = $1
+	if (ok) {
+		dbox=new HBox()
+		response = dbox.dialog("Are you sure you want to clear all selected sections?","Yes","No")
+		if (response) { clear_selsecs() }
+	}
+}
+
+// ---------------------------------------------------------------------------------
+
+proc select_selsec() { local input, i
+	input=$1
+	if (input>=0) {
+		SELSEC = input
+		selsec_list.select(SELSEC)
+		selsec.sec shape_selsec(1) // plot.hoc
+		selsec_subtree_list.object(SELSEC).secref.sec selsec = new SectionRef()
+		selsec.sec shape_selsec(2) // plot.hoc
+		selsec.sec sprint(str_selsec,"%s %g - %g um",selsec_subtree_list.object(SELSEC).name,distance(0),distance(1))
+	}
+	selsecparambox.unmap()
+}
+
+// ---------------------------------------------------------------------------------
+
+proc shape_section_selection() {
+	selsec_flag = 1	// a section has been selected
+	selsec = new SectionRef()	
+}
+
+// ---------------------------------------------------------------------------------
+
+// copy data structure and values from the parent subtree to the selsec subtree
+proc selsec_copy_subtree() { local i,j
+	subtree = selsec_subtree_list.object(SELSEC)
+	parent_subtree = subtree.parent_subtree
+	for i = 0, parent_subtree.numchannels-1 {
+		channel = parent_subtree.channlist.object(i)
+		subtree.add_channel(new Channel(channel.name))
+		for j = 0, channel.numparams-1 {
+			param = channel.paramlist.object(j)
+			sprint(cmd,"subtree.channlist.object(%d).add_parameter(new Channel_Parameter(%s))",i,param.arguments)
+			execute(cmd)
+			subtree.channlist.object(i).paramlist.object(j).selsec_private_varnames() // make distinguishable variable names
+		}
+	}
+}
+
+proc selsec_create_subtree() { local i, parent_subtree_id	
+	for i = 0, LAYOUT.numsubtrees-1 {
+		parent_subtree = LAYOUT.subtree_list.object(i)
+		selsec.sec ifsec parent_subtree.sec_list { // if the selected section is in the subtree section list
+			parent_subtree_id = i
+			i = LAYOUT.numsubtrees	// end loop
+		}
+	}
+	parent_subtree = LAYOUT.subtree_list.object(parent_subtree_id)
+	selsec.sec selsec_subtree_list.append(new Subtree(parent_subtree))
+	subtree = selsec_subtree_list.object(SELSEC)
+	selsec_copy_subtree()
+}
+
+proc add_selsec() { local i, ok, parent_subtree_id
+	ok=$1
+	if (ok && selsec_flag) {
+		selsec.sec ifsec selsec_section_list { ok = 0 } // if the selected section has already been added to the list
+		if (ok) {
+			NSELSECS += 1
+			SELSEC = NSELSECS-1
+			selsec.sec selsec_list.append(new String(secname()))
+			selsec.sec selsec_section_list.append()
+			selsec_create_subtree()
+			selsec_list.select(SELSEC)
+			selsec.sec sprint(str_selsec,"%s %g - %g um",selsec_subtree_list.object(SELSEC).name,distance(0),distance(1))
+/*			
+			for i = 0, NLOGSYNS - 1 {
+				logsyn = logsynlist.object(i)
+				logsyn.sec.sec {
+					ifsec selsec_list.object(SELSEC).s {
+						logsyn.selsec_flag = 1
+					}
+				}
+			}
+*/		
+		}
+		selsec_flag = 0
+	}
+}
+
+proc remove_selsec() { local ok, i
+	ok=$1
+	if (ok && SELSEC>=0) {
+		selsec.sec ifsec selsec_section_list {  // if the selected section appears in the list
+			selsecparambox.unmap()
+/*			
+			for i = 0, NLOGSYNS - 1 {
+				logsyn = logsynlist.object(i)
+				logsyn.sec.sec {
+					ifsec selsec_list.object(SELSEC).s {
+						logsyn.selsec_flag = 0
+					}
+				}
+			}
+*/
+			selsec_list.remove(SELSEC)
+			selsec.sec selsec_section_list.remove()
+			selsec_subtree_list.object(SELSEC).selsec_subtree_destroy()
+			selsec_subtree_list.remove(SELSEC)
+			NSELSECS -= 1
+			select_selsec(NSELSECS - 1)
+			selsec.sec shape_selsec(1) // plot.hoc
+			channel_update_parameters(1) // restore removed selsec values
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------------
+
+proc selsec_plot_subtree() { local type
+	type = $1
+	subtree = selsec_subtree_list.object(SELSEC)
+	scan_subtree_channels(1,type,subtree)
+	scan_subtree_channels(0,type,subtree.parent_subtree)
+}
+
+// ---------------------------------------------------------------------------------
+
+proc selsec_channel_update_parameters() { local ok, i
+	ok=$1
+	subtree = selsec_subtree_list.object(SELSEC)
+	if (ok) {
+		UNBALANCED=1 // flag signaling that cell may be unbalanced and will be balanced upon simulation run
+		subtree_channel_update(subtree)
+	} else {
+		subtree_channel_restore(subtree)
+	}
+}
+
+// ---------------------------------------------------------------------------------
+
+proc selsec_show() { local i, j
+	for i = 0, NSELSECS-1 {
+		selsec_subtree_list.object(i).secref.sec shape_selsec(5) // plot.hoc
+//		selsec.sec shape_selsec(2)
+	}
+	selsec_line()	// plot.hoc
+}
+
+// ---------------------------------------------------------------------------------
+
+proc selsec_parameter_panel() { local j, k
+	selsecparambox.unmap()
+	selsecparambox=new VBox()
+	selsecparambox.intercept(1)
+	xpanel("params")
+		subtree = selsec_subtree_list.object(SELSEC)
+		xlabel(subtree.name)
+		for j=0, subtree.numchannels-1 {
+			channel=subtree.channlist.object(j)
+			for k=0, channel.numparams-1 {
+				 param=channel.paramlist.object(k)
+//				 if (param.user_access && param.type!=2) { // not a membrane parameter
+				 if (param.user_access) { // not a membrane parameter
+					xvalue(param.name,param.var_name,1,"selsec_channel_update_parameters(RDP_check())")
+				}
+			}
+		}
+	xpanel()
+	selsecparambox.intercept(0)
+	selsecparambox.map("Section Parameters")
+}
+
+proc selsec_control() {
+	selsecbox=new VBox()
+	selsecbox.intercept(1)
+		xpanel("data")
+			xvarlabel(str_selsec)
+		xpanel()
+		xpanel("buttons",1)
+			xbutton("add","add_selsec(RDP_check())")
+			xbutton("remove","remove_selsec(RDP_check())")
+			xbutton("clear","user_clear_selsecs(RDP_check())")
+			xbutton("show","selsec_show()")
+		xpanel()
+		xpanel("selsecs",1)
+			selsec_list.browser("Name","s")
+			xbutton("parameters", "selsec_parameter_panel()")
+			xbutton("plot g","selsec_plot_subtree(1)")
+			xbutton("plot kinematics","selsec_plot_subtree(0)")
+		xpanel()
+	selsecbox.intercept(0)
+	selsecbox.map("Selected Sections")
+	selsec_list.select_action("select_selsec(hoc_ac_)")
+	selsec_list.select(SELSEC)
+}
+
+// ---------------------------------------------------------------------------------
+
+proc write_selsecs() { local i, j
+	selsec_file=$o1
+	selsec_file.printf("NSELSECS = %d",NSELSECS) // number of selected sections
+	for i = 0, NSELSECS-1 {
+		subtree = selsec_subtree_list.object(i)
+		selsec_file.printf("\n%s",selsec_list.object(i).s)
+		for j = 0, subtree.numchannels-1 {
+			channel = subtree.channlist.object(j)
+			for k = 0, channel.numparams-1 {
+				param = channel.paramlist.object(k)
+				if (param.user_access) {
+					selsec_file.printf("\n%s=%g",param.var_name,param.var_value)
+				}
+			}
+		}
+		selsec_file.printf("\n*")
+	}
+}
+
+
+proc read_selsecs() { local i, total
+	clear_selsecs()
+	selsec_file = $o1
+	selsec_filename = $s2
+	selsec_file.ropen(selsec_filename)
+	total = selsec_file.scanvar() // number of selected sections
+ 	for i = 0, total-1 {
+		selsec_file.scanstr(strng)
+		sprint(cmd,"%s selsec = new SectionRef()",strng)
+		execute(cmd)
+		selsec_flag = 1
+		add_selsec(1)
+		while(1) {
+			selsec_file.scanstr(strng)
+			if (!strcmp(strng,"*")) { break }
+			execute(strng)
+		}
+		selsec_channel_update_parameters(1)
+	}
+	selsec_file.close
+}

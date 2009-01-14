@@ -1,0 +1,17 @@
+// simple axon type 3 simple and big in area (to free soma from over excitability)
+
+create axon
+
+proc create_axon() {
+	 axon  {nseg=1 diam=10 L=500}
+	 axon_attach()
+}
+
+proc axon_attach() {
+	 sprint(cmd,"%s connect axon(0), 0.5",MORPH.origin_name)
+	 execute(cmd)
+}
+
+proc axon_detach() {
+	 axon disconnect()
+}

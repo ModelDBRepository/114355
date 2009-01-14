@@ -1,0 +1,62 @@
+// run procedures for setting up the program
+
+// Caveats:
+// -------
+// in n160 and n400 the soma is composed of several sections, soma[2] is the one connected to the axon
+// MS channels include spine compensation while M don't
+// channel files are still independent hoc files with there own parameters and function commands
+
+load_file("nrngui.hoc")
+
+xopen("objrefs.hoc")		// objrefs and strdefs sorted by hoc file
+xopen("defaults.hoc")		// default variable and parameter values
+xopen("files.hoc")			// load all hoc files with templates and procedures
+// configure the model cell
+// ------------------------
+prepare_morphlist()
+prepare_layoutlist()
+prepare_distriblist()
+cell_cfg_panel()
+
+// after cell configuration is finished 
+proc proceed() {
+	// prepare the model cell
+	// ---------------------- 
+	create_section_lists()	// cell.hoc
+	// create tree and Sections
+	// ------------------------
+	create_root_list() // sections.hoc
+	create_tree() // sections.hoc
+	Section_to_Branch() // sections.hoc
+	sort_leafsecs()			// cell.hoc
+	section_segmentation()	// cell.hoc - special segments (e.g. leafsec)
+	segment_coordinates() // vertical_distance.hoc
+	branch_dependent_section_lists(MORPH.trunk_criterion) // a section appearing in more than 'argument' branches, belongs to the trunk
+	vertical_distance()
+	channel_update_parameters(1)
+	// create logical synapses
+	// -----------------------
+	synlocate() // loaded logsyn distribution file
+	syn_distance()	// synapses.hoc
+//	initial_SF(1)
+	browser_logsynlist_update()
+	prepare_subg_list() // synapses.hoc
+	prepare_selsec_list() // cell.hoc
+	// prepare records and load existing ones from file
+	 // ------------------------------------------------
+	prepare_paramlist() // configurations.hoc
+	 prepare_protocols()
+	 prepare_simlist()
+	 record_manager() // prepare records
+	 read_configurations() // read configuration structure and the parameter values
+	 // gui
+	 // ---
+	 prepare_plotter()
+//	 prepare_shape_export(0) // initially the flag shape_export=0
+	 real_time_plot()
+	 prepare_control()
+// this is temporarily here, since I can't get it to work in plots.hoc
+ 	 shape_plot.exec_menu("View = plot")
+ 	 shape_plot.exec_menu("10% Zoom in")
+	 print "Ready"
+}

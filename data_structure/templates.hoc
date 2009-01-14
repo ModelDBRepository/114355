@@ -1,0 +1,742 @@
+/* The data structure is hierachical:
+   tree (1:m) branch (m:m) section (1:m) logical synapse (1:m) synapse
+   Note that while each branch is composed of a list of sections, different branches may share a section, hence the many-to-many structure.
+   The templates for each element in the hierarchy are described in this file.
+
+   Records: specified synaptic measures (variables or vectors) are saved to a specific file
+   at the end of a simulation run (specific measure and run) and are loaded from file (if file
+   exists) at start up.
+
+*/
+// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+begintemplate Name
+
+public name
+strdef name
+
+proc init() {
+	name=$s1
+}
+
+endtemplate Name
+// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+
+// Since each segment has a single average potential, all synapses onto a given segment are represented by one single logical synapse.
+// This is intended to save a lot of computation time, especially with low spatial resolution (small number of segments).
+begintemplate Logical_Synapse
+
+public syn	// pointer to the model synapse
+public numsyns	// number of synapses represented by this logical synapse
+public seglen	// logsyn's segment's length
+public syndist,syninput,syn_distance,syn_input
+public sec	// section reference
+public node // Node host of logical synapse
+public loc	// location of synhapse within section
+public id
+public interval	// average interval between logsyn's synapses' events
+public subgroup_id	//
+public subgroup
+public set_subgroup
+public unset_subgroup
+public selsec_flag	// is this logsyn located on a selected section
+public logsyn_name  // name to appear in the logsyn list browser
+//public influence // measure for the influence of all other EPSP on this synapse (perhapse integral of BPAP can be added too)
+//public total_average // procedure to calculate avg_voltage out of record vector
+public reset_records // procedure to prepare record vectors of voltage and SF
+//public moving_average // procedure to prepare moving average vector out of voltage record vector
+//public mavrec	   // temporarily public moving average vector
+//public remove_records	// procedure to remove all records (after they have been converted to branch orientation)
+public getrec			// procedure to assing a specified variable or object name with it's value
+public setrec			// procedure to assing a record with specified variable or object
+public initial_gmax
+public restore_initial_gmax
+public set_bin_numsyns
+public bin_numsyns
+
+public combined_EPSP_field_records  // procedure to create records for EPSP field
+public combined_EPSP_field_compute  // procedure to integrate the voltage recorded
+//public remove_combined_EPSP_field_records // procedure to remove EPSP field records from synapse
+
+public single_EPSP_field_records  // procedure to create records for EPSP field
+public single_EPSP_field_compute  // procedure to integrate the voltage recorded
+//public remove_single_EPSP_field_records // procedure to remove EPSP field records from synapse
+
+// records (some records are in the synapse itself, accessible through syn)
+// -----------------------------------------------------------------------
+public reset_record
+/* update: records.hoc record_manager(); plots.hoc */
+// format: location(dend,soma)/dependency(run,general)/record-type(variable,vector,range variable)/serial-number
+// run and cell dependent
+// ----------------------
+// variables:
+// syn.Esf0	  		 // 0000 - initial sf value
+// syn.Esf	  	 	 // 0001 - sf
+// syn.vavg	  	 	 // 0002 - average voltage at synapse
+// syn.Isf0	  		 // 0003 - initial sf value
+// syn.Isf	  	 	 // 0004 - sf
+// time vectors:
+public vrec		// 0010 - v(t) vector
+public Egmaxrec		// 0011 - sampled sf(t) vector
+public mavgrec		// 0012 - moving average samples
+public post_EPSPrec	// 0013 - EPSP(t) at the synapse after a run
+public post_sEPSPrec	// 0014 - EPSP(t) recorded at soma after a run
+public post_sEPSCrec	// 0015 - EPSC(t) at the soma after a run
+public Igmaxrec	  	// 0016 - sampled sf(t) vector
+// data vectors:
+public input	  // 0020 - presynaptic event times
+// cell dependent
+// --------------
+// variables:
+//public combined_EPSP_field  // EPSP field 'seen' by the synapse when all synapses are active
+//public single_EPSP_field  // EPSP field 'seen' by the synapse - sum of all individual EPSPs
+// vectors:
+public EPSPrec	  // 0110 - EPSP(t) at the synapse
+public sEPSPrec	  // 0111 - EPSP(t) at the soma
+public BPAPrec	  // 0112 - BPAP(t) at the synapse
+// general
+// -------
+public dist		  // 0200 - distance from soma
+public range		  // 0201 - a manually loaded range variable
+
+public tmpvec		// a vector used for various manual calculations
+public copy_rec
+public sub_rec
+public div_rec
+// ----------------------------------------------------------
+
+external tstop,INITIAL,GMAX0,randgmax
+external gmax_copy,gmax_copy_exists
+
+objref node,sec,syn
+objref vrec,Egmaxrec,Igmaxrec,mavgrec,input
+objref EPSPrec,sEPSPrec,BPAPrec,post_sEPSCrec
+objref post_EPSPrec,post_sEPSPrec
+objref combined_EPSP_field_vrec
+objref single_EPSP_field_vrec
+objref dbox
+objref subgroup
+objref syndist,syninput
+objref tmpvec
+strdef logsyn_name
+
+proc init() {
+	numsyns=1
+	node=$o1
+	sec=new SectionRef()
+	dist=$2
+	loc=$3
+	id=$4 	// synapse serial number
+	sprint(logsyn_name,"LogSyn %d",id)
+	subtree=node.subtree	// 0=basal; 1=apical
+	if (subtree==0) { dist*=-1 } // basal distance is by my convention negative
+	sec.sec { seglen=L/nseg	} // segment length
+	subgroup_id=0 // subgroup the synapse belongs to (0 means no subgroup)
+	selsec_flag = 0 // flag: 0 = logsyn is not located on a selected section; 1 = it is.
+	bin_numsyns=-1	// total number of synapses in the distance bin this logsyn belongs to
+	// temporary:
+//	avg_EPSP=0				  // average voltage at synapse during its EPSP
+//	combined_EPSP_field=0	  // average voltage at synapse when all the synapses are activated together
+//	single_EPSP_field=0		  // sum of average voltages at synapse for single EPSP one synapse at a time
+	// single_EPSP-avg_EPSP results in net inter-synapse influence
+	// combined_EPSP-avg_EPSP results in approximation for net joint-inter-synapse influence
+	interval=0
+	range=0	// range variable
+	tmpvec = new Vector() // auxilliary vector
+}
+
+proc initial_gmax() {
+	syn.Egmax0=$1
+	syn.Egmax=$1
+//	syn.Isf0=$2
+//	syn.Isf=$2
+}
+
+proc reset_record() {
+	recdep=$1 	  	// dependency: 0=cell and run dependent; 1=cell dependent
+	rectype=$2		// type: 0=vector; 1=variable
+	recnum=$3
+	if (recdep==0) { // cell and run dependent
+		if (rectype==0) { // variable
+			if ( recnum==0) {  // I think there's no need for reseting SF0
+			} else if (recnum==1) { syn.Egmax=syn.Egmax0 
+			} else if (recnum==2) { syn.vavg=0
+//			} else if (recnum==4) { syn.Isf=syn.Isf0 }	// inhibitory
+			}
+		} else if (rectype==1) { // time vector
+			if (recnum==0) { vrec=new Vector()
+			} else if (recnum==1) { Egmaxrec=new Vector()
+			} else if (recnum==2) { mavgrec=new Vector()
+			} else if (recnum==3) { post_EPSPrec=new Vector()
+			} else if (recnum==4) { post_sEPSPrec=new Vector()
+			} else if (recnum==5) { post_sEPSCrec=new Vector()
+			} else if (recnum==6) { Igmaxrec=new Vector() }	// inhibitory
+		} else if (rectype==2) { // data vector
+			if (recnum==0) { input=new Vector() }
+		}
+	} else if (recdep==1) { // cell dependent
+		if (rectype==1) { // vector
+			if (recnum==0) { EPSPrec=new Vector()
+			} else if (recnum==1) { sEPSPrec=new Vector()
+			} else if (recnum==2) { BPAPrec=new Vector() }
+		}
+	}
+}
+
+// sets the records to the SynapticRecord record_write()
+proc getrec() { local reccode
+	recdep=$1 	  	// dependency: 0=cell and run dependent; 1=cell dependent
+	rectype=$2		// type: 0=vector; 1=variable
+	recnum=$3
+	if (recdep==0) { // cell and run dependent
+		if (rectype==0) { // variable
+			if ( recnum==0) { $&4=syn.Egmax0 
+			} else if (recnum==1) { $&4=syn.Egmax 
+			} else if (recnum==2) { $&4=syn.vavg 
+//			} else if (recnum==3) { $&4=syn.Isf0	// inhibitory 
+//			} else if (recnum==4) { $&4=syn.Isf }	// inhibitory
+			}
+		} else if (rectype==1) { // time vector
+			if (recnum==0) { $o4=vrec
+			} else if (recnum==1) { $o4=Egmaxrec
+			} else if (recnum==2) { $o4=mavgrec
+			} else if (recnum==3) { $o4=post_EPSPrec
+			} else if (recnum==4) { $o4=post_sEPSPrec
+			} else if (recnum==5) { $o4=post_sEPSCrec 
+			} else if (recnum==6) { $o4=Igmaxrec }	// inhibitory
+		} else if (rectype==2) { // data vector
+			if (recnum==0) { $o4=input }
+		}
+	} else if (recdep==1) { // cell dependent
+		if (rectype==1) { // vector
+			if (recnum==0) { $o4=EPSPrec
+			} else if (recnum==1) { $o4=sEPSPrec
+			} else if (recnum==2) { $o4=BPAPrec }
+		}
+	} else if (recdep=2) { // general
+		if (rectype==0) { // variable
+			if (recnum==0) { $&4=dist
+			} else if (recnum==1) { $&4=range }
+		}
+	}
+}
+
+// sets the records from the SynapticRecord record_read()
+proc setrec() { local reccode
+	recdep=$1 	  	// dependency: 0=cell and run dependent; 1=cell dependent
+	rectype=$2		// type: 0=vector; 1=variable
+	recnum=$3
+	if (recdep==0) { // cell and run dependent
+		if (rectype==0) { // variable
+			if ( recnum==0) { syn.Egmax0=$4
+			} else if (recnum==1) { syn.Egmax=$4
+			} else if (recnum==2) { syn.vavg=$4
+//			} else if (recnum==3) { syn.Isf0=$4	// inhibitory 
+//			} else if (recnum==4) { syn.Isf=$4 }	// inhibitory
+			}
+		} else if (rectype==1) { // vector
+			if (recnum==0) { vrec.copy($o4)
+			} else if (recnum==1) { Egmaxrec.copy($o4) //Isfrec.copy($o5)
+			} else if (recnum==2) { mavgrec.copy($o4)
+			} else if (recnum==3) { post_EPSPrec.copy($o4)
+			} else if (recnum==4) { post_sEPSPrec.copy($o4)
+			} else if (recnum==5) { post_sEPSCrec.copy($o4)
+			} else if (recnum==6) { Igmaxrec.copy($o4) }	// inhibitory
+		} else if (rectype==2) { // data vector
+			if (recnum==0) { input.copy($o4) }
+		}
+	} else if (recdep==1) { // cell dependent
+		if (rectype==1) { // vector
+			if (recnum==0) { EPSPrec.copy($o4)
+			} else if (recnum==1) { sEPSPrec.copy($o4)
+			} else if (recnum==2) { BPAPrec.copy($o4) }
+		}
+	} else if (recdep=2) { // general
+		if (rectype==0) { // variable
+			if (recnum==0) { dist=$4
+			} else if (recnum==1) { range=$4 }
+		}
+	}
+}
+
+// interpolate individual synapse distance
+proc syn_distance() { local i
+	syndist=new Vector()
+	for i=1,numsyns {
+		syndist.append(dist-seglen*(0.5-i/(numsyns+1)))
+	}
+}
+// presently inputs are intermixed on the input vector
+/*
+// number of individual synapse input events
+proc syn_input() { local i,j0,j1,num,num0,n,t1,t2
+	n=numarg()
+	if (n) {
+		t1=$1
+		t2=$2
+	}
+	j0=0
+	j1=0
+	syninput=new Vector()
+	num=input.size
+	for i=1,numsyns {
+		if (i<numsyns) {
+			while (input.x(j1+1)>input.x(j1)) { j1+=1 }
+		} else { j1=num-1 }
+		if (n) {
+			tmpvec=input.c(j0,j1)
+			tmpvec.where("[]",t1*1000,t2*1000)
+			num0=tmpvec.size
+		} else { num0=j1+1-j0 }
+		syninput.append(num0)
+		j0=j1+1
+	}
+}
+*/
+proc set_rand_interval() {
+}
+
+proc set_bin_numsyns() {
+	bin_numsyns=$1
+}
+
+proc set_subgroup() {
+	subgroup_id=$1
+	subgroup=$o2
+}
+
+proc unset_subgroup() {
+	subgroup_id=0
+	objref subgroup
+}
+
+// two procedures to compute residual potentiation as a function of time for each synapse
+proc copy_rec() {
+	tmpvec=new Vector()
+	tmpvec=Egmaxrec.c
+}
+
+proc sub_rec() {
+	tmpvec.sub(Egmaxrec)
+}
+
+proc div_rec() {
+	tmpvec.div(Egmaxrec)
+}
+/*
+// ----------------------------------------
+// combined EPSP field:
+// -------------------
+proc combined_EPSP_field_records() {
+	 combined_EPSP_field_vrec=new Vector(tstop/dt+1)
+	 combined_EPSP_field_vrec.record(&sec.sec.v(loc))
+}
+proc combined_EPSP_field_compute() {
+	 combined_EPSP_field=combined_EPSP_field_vrec.sum()*dt/tstop
+}
+proc remove_combined_EPSP_field_records() {
+	 objref combined_EPSP_field_vrec
+}
+// ----------------------------------------
+// single EPSP field:
+// -------------------
+proc single_EPSP_field_records() {
+	 single_EPSP_field_vrec=new Vector(tstop/dt+1)
+	 single_EPSP_field_vrec.record(&sec.sec.v(loc))
+}
+proc single_EPSP_field_compute() { local current_logsyn_id,v0rec
+	 current_logsyn_id=$1
+/*
+	 v0rec=$o2 // soma voltage record vector
+	 if (current_logsyn_id==id) {
+	 	peak_EPSP=single_EPSP_field_vrec.max()
+		avg_EPSP=single_EPSP_field_vrec.sum()*dt/tstop
+		soma_peak_EPSP=v0rec.max()
+	 }
+
+	 single_EPSP_field+=single_EPSP_field_vrec.sum()*dt/tstop
+}
+proc remove_single_EPSP_field_records() {
+	 objref single_EPSP_field_vrec
+}
+
+// ----------------------------------------
+/*
+proc moving_average() { local i
+	 mavrec=new Vector()
+	 for i=0,ma_points-1 {
+	 	 mavrec.append(vrec.mean(i,i+window-1))
+	 }
+}
+proc total_average() {
+	 avg_voltage=vrec.mean()
+}
+*/
+
+endtemplate Logical_Synapse
+
+// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+proc set_logsyn_GMAX0() {	// just for declaration
+}
+// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+// subgroup of synapses for correlated input
+begintemplate Subgroup
+
+public id
+public name
+public logsynlist
+public nlogsyns
+public nsyns
+public add_logsyn
+public remove_logsyn
+public clear_all
+public Efreq
+public Ecorr
+public proc_num
+public rnd
+public ncstim
+public prepare_nc_array
+public Ifreq
+public gmax0
+public potentiation
+public uniform_gmax0
+public enable
+//public param_name_list
+//public param_value
+//public num_param
+public update_param
+public reset_param
+public update_potentiation
+public reset_potentiation
+
+external EFREQ_VIVO,ECORR,IFREQ_VIVO,GMAX0,SCALE_ENABLE,GMAX0_TYPE
+objref this // Subgroup needs its own pointer to pass on to the logsyns in it
+objref logsynlist,logsyn
+objref rnd,ncstim[1]
+
+//objref param_name_list,param_value
+strdef name
+external set_logsyn_GMAX0 // synapses.hoc
+
+proc init() {
+	id=$1
+	logsynlist=new List()
+	nlogsyns=0
+	nsyns=0
+	sprint(name,"Subgroup %d",id)
+	Efreq=EFREQ_VIVO // an in vivo parameter
+	Ecorr=ECORR	// correlation factor for excitatory synapses
+	proc_num = 0 	// number of recent process with event produced by randomizer (linked in artificial_vivo.hoc)
+	Ifreq=IFREQ_VIVO // an in vivo parameter
+	gmax0=GMAX0
+	potentiation = 1	// by default, subgroup sf0 equals the control sf0
+	copy_potentiation = 1	// this is used for changing delta (see below)
+	uniform_gmax0=0	// flag 0=each subgroup synapse has its own sf0; 1=uniform subgroup sf0 for all subgroup members
+	update_param(0)
+	enable=SCALE_ENABLE // default as rest of synapses; I'm no longer using this subgroup-specific property
+//	 param_name_list=new List()
+//	 param_value=new Vector()
+//	 num_param=0	// number of parameters
+}
+/*
+proc update_interval() { local i // in planning a param list like in channels more or less
+	interval=$1
+}
+*/
+// temporarily, the interval updates in artificial_vivo.hoc
+
+proc reset_param() {
+	Efreq=copy_Efreq
+	Ecorr=copy_Ecorr
+	Ifreq=copy_Ifreq
+	gmax0=copy_gmax0
+	uniform_gmax0=copy_uniform_gmax0
+}
+/*
+proc add_param() {
+	param_name_list.append($s1)
+	param_value.append($2)
+}
+*/
+
+proc update_param() { local i,type
+	type=$1	// 1=need to loop logsynlist
+	copy_Efreq=Efreq
+	copy_Ecorr=Ecorr
+	copy_Ifreq=Ifreq
+	copy_gmax0=gmax0
+	copy_uniform_gmax0=uniform_gmax0
+	if (type==1) { // sf0
+		for i=0,nlogsyns-1 {
+			logsyn=logsynlist.object(i)
+			set_logsyn_GMAX0(logsyn.id) // if uniform has switched to 0, then the original sf0 value will be restored
+//			logsyn.initial_sf(sf0)
+		}
+	}
+}
+
+proc reset_potentiation() {
+	potentiation = copy_potentiation
+}
+
+proc update_potentiation() {
+	if (potentiation!= copy_potentiation) {
+//		sf0 -= copy_delta_sf0
+//		sf0 += delta_sf0
+		for i=0,nlogsyns-1 {
+			logsyn=logsynlist.object(i)
+			set_logsyn_GMAX0(logsyn.id, 1/copy_potentiation)	// undo previous delta
+			set_logsyn_GMAX0(logsyn.id, potentiation)	// update current delta
+		}
+		copy_potentiation = potentiation
+	}
+}
+
+func add_logsyn() {
+	logsyn=$o1
+	this=$o2
+	if (logsyn.subgroup_id==0) { // logsyn is not assigned to a group
+		logsynlist.append(logsyn)
+		logsyn.set_subgroup(id,this)
+		nlogsyns+=1
+		nsyns+=logsyn.numsyns
+		set_logsyn_GMAX0(logsyn.id, potentiation)
+		return 1
+	} else { return 0 }
+}
+
+proc remove_logsyn() { local logsyn_i
+	logsyn_i=$1
+	set_logsyn_GMAX0(logsyn_i, 1/potentiation)
+	logsyn=logsynlist.object(logsyn_i)
+	logsynlist.remove(logsyn_i)
+	logsyn.unset_subgroup()
+	nlogsyns-=1
+	nsyns-=logsyn.numsyns
+//	logsyn.restore_initial_sf()
+}
+
+proc clear_all() { local i
+	for i=0,nlogsyns-1 {
+		logsyn=logsynlist.object(i)
+		logsyn.unset_subgroup()
+//		logsyn.restore_initial_sf()
+	}
+	logsynlist.remove_all()
+	nlogsyns=0
+	nsyns=0
+}
+
+proc prepare_nc_array() {
+	objref ncstim[$1]
+}
+
+endtemplate Subgroup
+
+// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+
+begintemplate Branch
+
+public seclist			// list of sections constituting the Branch
+public last_section		// last section of the branch
+public last_node		// last node of the branch
+public nodelist	   		// list of Nodes constituting the Branch
+public logsynlist  		// list of all the logical synapses included in the Branch
+public numlogsyn  	 	// number of logical synapses along the branch
+public length	 		// number of Sections in the branch
+public Node_to_Branch	// procedure to append a Node to the Branch
+public branch_name		// Branch's name
+public name_branch		// procedure to name the branch
+public id
+public branch_name
+public subtree	  		// branch belongs to subtree: 0=basal; 1=apical
+public oblique_dist		// distance of oblique sub-branch connection to trunk
+public trunk_sec		// trunk section to which oblique sub_branch is attached
+public trunk_loc		// location on trunk_sec
+
+objref seclist,last_section,tmp_section,nodelist,logsynlist,distvec,root,node
+objref last_node
+objref long_vrec,tmpvrec,vreclist
+objref long_sfrec,tmpsfrec,sfreclist
+objref trunk_sec
+strdef branch_name
+
+proc init() {
+	 seclist=new SectionList()
+	 nodelist=new List()
+	 logsynlist=new List() // appended by Node
+	 id=0
+	 length=0
+	 numlogsyn=0
+	 subtree=$1	// branch belongs to subtree: 0=basal; 1=apical
+	 oblique_dist=0
+	 trunk_loc=0
+}
+
+proc Node_to_Branch() { local s,i
+	 objref node
+	 node=$o1
+	last_node = node // reference to last node
+//	 tmp_section=new SectionRef()
+//	 access node.sec.sec
+	 node.sec.sec {
+	 	seclist.append()
+		last_section=new SectionRef() // the last section will remain refered to
+	 }
+//	 access tmp_section.sec
+	 nodelist.append(node)
+	 length+=1
+}
+proc name_branch() { local j // called by Tree
+	 id=$1
+	 strdef root_name
+	 nodelist.object(0).sec.sec { root_name=secname() }
+//	 sprint(branch_name,"Branch %2d (%s)",id,root_name)
+	 sprint(branch_name,"Branch %d",id)
+}
+
+endtemplate Branch
+
+// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+
+begintemplate Node
+
+public sec	  		// reference to the section
+public parent 	 	// reference to the parent Node (note that the regular parent refers to a section object and not to a Node one)
+public childcount	// number of child Nodes counter
+public childstatus	// binary vector: 0=child Node not created yet; 1=otherwise
+public childlist	// list of child Nodes
+public status		// flag: 0=unbranchable; 1=branchable
+public root			// flag: 1=root; 0=non root
+public leaf			// flag: 1=leaf; 0=non leaf
+public long_leafsec 
+public logsynlist	// a list of Logical_Synapses onto the Node
+public branchlist	// a list of Branches sharing the Node
+public numbranches
+public numlogsyn
+public section_name // Node's name
+public subtree		// 0=basal; 1=apical
+public main_trunk	// flag: 0=oblique branch; 1=main trunk
+public add_branch	// add a branch to the list of branches that share this node
+public update_branches // procedure to update Node's branches logsynlist
+objref sec,parent,childlist,childstatus,logsynlist,branchlist,logsyn,branch
+
+proc init() {
+	sec=new SectionRef()
+	logsynlist=new List()
+	branchlist=new List()
+	childlist=new List()
+	childcount=0
+	childstatus=new Vector(sec.nchild,0)
+	long_leafsec = 0	// flag: 1=is one of NLEAFSECS leaf nodes
+	if (sec.nchild) { // Section is 'branchable'
+	  status=1	// Section is branchable
+	  leaf=0	// Section is not a leaf
+	} else {
+	  status=0	// Section is not branchable
+	  leaf=1  	// Section is a leaf
+	}
+	root=$1
+	if (root==1 && leaf==1) { // special case of a root that is also a leaf, but should be considered a branch
+		status=1
+	}
+	name_section()
+	numbranches=0	// number of branches that share this node
+	subtree=1	// 0=basal; 1=apical
+	main_trunk=0	// flag
+	numlogsyn=0
+}
+
+proc name_section() {
+	 strdef section_name
+	 sec.sec { section_name=secname() }
+}
+
+proc add_branch() {
+	branch=$o1
+	branchlist.append(branch)
+	if (numbranches==0) { subtree=branch.subtree }
+	numbranches+=1
+}
+
+proc update_branches() { // called by synlocate() from main.hoc
+	 logsyn=$o1
+	 numlogsyn+=1 // this means a new logical synapse has been added to the node
+	 for i=0,numbranches-1 {
+	 	branch=branchlist.object(i)
+	 	 branch.logsynlist.append(logsyn)
+	 	 branch.numlogsyn+=1
+	 }
+//	 if (branchlist.object(0).subtree==0) { logsyn.dist*=-1 } // basal branch => negative distance
+}
+
+endtemplate Node
+
+// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+
+begintemplate Tree
+
+public branchlist	// list of Branches
+public numbranch 	// number of Branches
+public add_branch	// procedure to add a branch to the tree
+public branch_complete // procedure to complete the making of each accepted branch
+public max_numlogsyn   // number of logsyns in the branch with the largest number of logsyns
+objref branchlist,branch
+
+proc init() { 
+	branchlist=new List()
+	numbranch=0	
+	max_numlogsyn=0
+}
+// add an accepted branch to the tree branch list
+proc add_branch() {
+	 objref branch
+	 branch=$o1
+	 branchlist.append(branch)
+	 branch.name_branch(numbranch)
+	 numbranch+=1
+	 if (branch.numlogsyn>max_numlogsyn) { max_numlogsyn=branch.numlogsyn }
+}
+
+endtemplate Tree
+
+// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+begintemplate Root
+public sec
+public parent
+public loc
+public parent_loc
+//public soma_replace
+public soma_restore
+
+//external shrunken_soma
+objref sec,parent,shrunken
+
+proc init() {
+	sec=new SectionRef()
+	sec.parent parent=new SectionRef()
+	loc=section_orientation()
+	parent_loc=parent_connection()
+}
+/*
+proc soma_replace() {
+	sec.sec disconnect()
+	shrunken_soma connect sec.sec(loc),parent_loc
+}
+*/
+proc soma_restore() {
+	sec.sec disconnect()
+	parent.sec connect sec.sec(loc),parent_loc
+}
+
+endtemplate Root

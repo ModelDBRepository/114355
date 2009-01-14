@@ -1,0 +1,220 @@
+// Channel layout from Migliore et al. (1999)
+// note that only trunk is endowed with active channels!
+// ===============================================================================
+
+// parameters
+// ----------
+
+v_init = -65
+celsius = 34.0
+
+Rm = 28000
+RmDend = Rm/2
+RmSoma = Rm
+RmAx = Rm
+
+Cm    = 1
+CmSoma= Cm
+CmAx  = Cm
+CmDend = Cm*2
+
+RaAll= 150
+RaSoma=150
+RaAx = 50
+
+gna =  .032
+AXONM = 2
+gkdr = 0.01
+KMULT =  0.048
+KMULTP = 0.048
+
+EK = -90
+ENa = 55
+EH = -30
+
+// ===============================================================================
+
+// variable defaults
+// -----------------
+
+SGNa=gna
+SNaATT=0.8
+SGKdr=gkdr
+SGKAp=KMULTP
+
+AxGNa=gna*AXONM
+AxGKdr=gkdr
+AxGKAp=KMULTP*0.2
+AxGact = -30 // vhalf for a and b threshold
+
+DbGNa=gna
+DbNaATT=1
+DbGKdr=gkdr
+DbGKAp=KMULTP
+DbGKAd=0
+DbGH=0
+DbSym=0	// basal dendrite symmetrical to apical one
+
+DaGNa=gna
+DaNaATT=0.5
+DaGKdr=gkdr
+DaGKAp=KMULT
+DaGKAd=KMULTP
+Damindiam=0.5 // active channels only on segments with diam>Damindiam
+Damaxdist=500 // active channels only on segment at distance<Damaxdist
+Daplatdist=500 // begin plateau
+Daproxdist=100 // switch from proximal A current to distal A current
+Darate=100 // rate of density ramp
+DaGH=0
+
+// ===============================================================================
+// user access flag; conductance parameter flag; [gui name]; [variable name];
+// ([] - if user access flag==1)
+// variable value; range distribution formula
+
+subtree = new Subtree("Soma",soma_section_list)
+	channel = new Channel("pas")
+		channel.add_parameter(new Channel_Parameter(0,0,"e_pas",v_init,"e_pas=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(0,1,"g_pas",1/RmSoma,"g_pas=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(0,0,"Ra",RaSoma,"Ra=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(0,0,"cm",CmSoma,"cm=param.var_value"))
+	subtree.add_channel(channel)
+	channel = new Channel("na_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_na_M","g Na+ (fast)","SGNa",SGNa,"gbar_na_M=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",ENa,"ena=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(1,0,"ar2_na_M","Na+ attenuation","SNaATT",SNaATT,"ar2_na_M=param.var_value"))
+	subtree.add_channel(channel)
+	channel = new Channel("kdr_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkdrbar_kdr_M","g K+ (dr)","SGKdr",SGKdr,"gkdrbar_kdr_M=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=param.var_value"))
+	subtree.add_channel(channel)
+	channel = new Channel("kap_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkabar_kap_M","g K+ (Ap)","SGKAp",SGKAp,"gkabar_kap_M=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=param.var_value"))
+	subtree.add_channel(channel)
+LAYOUT.add_subtree(subtree)
+
+subtree = new Subtree("Basal Dendrite",dendrite_basal_section_list)
+	channel = new Channel("pas")
+		channel.add_parameter(new Channel_Parameter(1,2,"","Basal Symmetry (0/1)","DbSym",DbSym,""))
+		channel.add_parameter(new Channel_Parameter(0,0,"e_pas",v_init,"e_pas=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(0,1,"g_pas",1/RmDend,"g_pas=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(1,2,"","Ra","RaAll",RaAll,"Ra=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(0,0,"cm",CmDend,"cm=param.var_value"))
+	subtree.add_channel(channel)
+	channel = new Channel("na_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_na_M","g Na+","DbGNa",DbGNa,"gbar_na_M=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",ENa,"ena=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(1,0,"ar2_na_M","Na+ attenuation","DbNaATT",DbNaATT,"ar2_na_M=param.var_value"))
+	subtree.add_channel(channel)
+	channel = new Channel("kdr_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkdrbar_kdr_M","g K+ (dr)","DbGKdr",DbGKdr,"gkdrbar_kdr_M=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=param.var_value"))
+	subtree.add_channel(channel)
+	channel = new Channel("kap_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkabar_kap_M","g K+ (Ap)","DbGKAp",DbGKAp,"if (DbSym) { apical_x(0,0,param.var_value) } else { gkabar_kap_M=param.var_value }")) // basal symmetrical to apical
+//		channel.add_parameter(new Channel_Parameter(1,1,"gkabar_kap_M","g K+ (Ap)","DbGKAp",DbGKAp,"gkabar_kap_M=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=param.var_value"))
+	subtree.add_channel(channel)
+/*
+	channel = new Channel("kad_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkabar_kad_M","g K+ (Ad)","DbGKAd",DbGKAd,"gkabar_kad_M=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=param.var_value"))
+	subtree.add_channel(channel)
+*/
+	channel = new Channel("hd_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"ghdbar_hd_M","g H","DbGH",DbGH,"ghdbar_hd_M=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ehd_hd_M",EH,"ehd_hd_M=param.var_value"))
+	subtree.add_channel(channel)
+LAYOUT.add_subtree(subtree)
+
+// non uniform density
+// -------------------
+proc apical_x() { local n,xdist
+	 n=numarg()
+	 if (diam>Damindiam && distance(0.5)<Damaxdist) {
+	 	sprint(cmd,"%s=%g",param.param_name,$1)
+		execute(cmd)
+		if (n>1) {
+		   for (x,0){
+		   	   xdist = distance(x)
+		   	   if (xdist>Daplatdist) {xdist=Daplatdist}
+			   if (xdist > Daproxdist){ // kad has this argument > 0
+			   	  sprint(cmd,"%s(x)=%g*(1+%g/Darate)",param.param_name,$2,xdist)
+				  execute(cmd)
+			   } else {  // kap has this argument > 0
+			   	  sprint(cmd,"%s(x)=%g*(1+%g/Darate)",param.param_name,$3,xdist)
+				  execute(cmd)
+			   }
+		   }
+
+		}
+	 } else {
+	 	sprint(cmd,"%s=0",param.param_name)
+		execute(cmd)
+	 }
+}
+
+
+subtree = new Subtree("Apical Dendrite",dendrite_apical_section_list)
+	channel = new Channel("pas")
+		channel.add_parameter(new Channel_Parameter(1,2,"","Minimum diam","Damindiam",Damindiam,""))
+		channel.add_parameter(new Channel_Parameter(1,2,"","Maximum distance","Damaxdist",Damaxdist,""))
+		channel.add_parameter(new Channel_Parameter(1,2,"","Plateau distance","Daplatdist",Daplatdist,""))
+		channel.add_parameter(new Channel_Parameter(1,2,"","Prox distance","Daproxdist",Daproxdist,""))
+		channel.add_parameter(new Channel_Parameter(1,2,"","Rate","Darate",Darate,""))
+		channel.add_parameter(new Channel_Parameter(0,0,"e_pas",v_init,"e_pas=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(0,1,"g_pas",1/RmDend,"g_pas=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(1,2,"","Ra","RaAll",RaAll,"Ra=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(0,0,"cm",CmDend,"cm=param.var_value"))
+	subtree.add_channel(channel)
+	channel = new Channel("na_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_na_M","g Na+ (fast)","DaGNa",DaGNa,"apical_x(param.var_value)"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",ENa,"ena=ENa"))
+		channel.add_parameter(new Channel_Parameter(1,0,"ar2_na_M","Na+ attenuation","DaNaATT",DaNaATT,"ar2_na_M=param.var_value"))
+	subtree.add_channel(channel)
+	channel = new Channel("kdr_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkdrbar_kdr_M","g K+ (dr)","DaGKdr",DaGKdr,"apical_x(param.var_value)"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=param.var_value"))
+	subtree.add_channel(channel)
+	channel = new Channel("kap_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkabar_kap_M","g K+ (Ap)","DaGKAp",DaGKAp,"apical_x(0,0,param.var_value)"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=param.var_value"))
+	subtree.add_channel(channel)
+/*
+	channel = new Channel("kad_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkabar_kad_M","g K+ (Ad)","DaGKAd",DaGKAd,"apical_x(0,param.var_value,0)"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=param.var_value"))
+	subtree.add_channel(channel)
+*/
+	channel = new Channel("hd_M")
+//		channel.add_parameter(new Channel_Parameter(1,1,"ghdbar_hd_M","g H","DaGH",DaGH,"ghdbar_hd_M=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(1,1,"ghdbar_hd_M","g H","DaGH",DaGH,"apical_x(0,0,param.var_value)"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ehd_hd_M",EH,"ehd_hd_M=param.var_value"))
+	subtree.add_channel(channel)
+LAYOUT.add_subtree(subtree)
+
+subtree = new Subtree("Axon",axon_section_list)
+	channel = new Channel("pas")
+		channel.add_parameter(new Channel_Parameter(0,0,"e_pas",v_init,"e_pas=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(0,1,"g_pas",1/RmAx,"g_pas=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(0,0,"Ra",RaAx,"Ra=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(0,0,"cm",CmAx,"cm=param.var_value"))
+	subtree.add_channel(channel)
+	channel = new Channel("nax_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_nax_M","g Na+ (fast)","AxGNa",AxGNa,"gbar_nax_M=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(1,0,"tha_nax_M","Na+ Vhalf activation","AxGact",AxGact,"tha_nax_M=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",ENa,"ena=param.var_value"))
+	subtree.add_channel(channel)
+	channel = new Channel("kdr_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkdrbar_kdr_M","g K+ (dr)","AxGKdr",AxGKdr,"gkdrbar_kdr_M=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=param.var_value"))
+	subtree.add_channel(channel)
+	channel = new Channel("kap_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkabar_kap_M","g K+ (Ap)","AxGKAp",AxGKAp,"gkabar_kap_M=param.var_value"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=param.var_value"))
+	subtree.add_channel(channel)
+LAYOUT.add_subtree(subtree)
+
+
+// --------------------------------------------------------------------------------------

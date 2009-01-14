@@ -1,0 +1,56 @@
+//////////////////////////////////////////////////////////////////////////////////////////////
+//                                      Synapse Functions
+//                                      =================
+//////////////////////////////////////////////////////////////////////////////////////////////
+
+proc synlocate() { local i,sl,ll,j,loc,newseg
+	objref node
+	i=-1
+	NSYNS=0
+	NLOGSYNS=0
+	sl=SYNINT // remaining area to next synapse location
+	objref logsyn,logsynlist
+	logsynlist=new List()	// list of Synapse objects
+	browser_logsynlist=new List()
+	for j=0,dNSEC-1 {
+		node=nodelist.object(j)
+		node.sec.sec {
+			for (x,0) { // scan all segments (exluding x=0 and x=1)
+				newseg=1	// flag for new segment
+				ll=area(x) // remaining segment area
+				while (ll>0) { // as long as there is a remaining segment area
+					if (ll<=sl) { // if it is too small
+						sl-=ll // subtract it from remaining area for synapse location
+						ll=0  // no more remaining segment area
+					} else { // if it is large enough
+						ll-=sl // subtract remaining area for synapse location from it
+						sl=SYNINT // reset synapse location for next synapse
+						loc=x
+						NSYNS+=1
+						if (!newseg) { // if location is in the same segment of the latest created synapse
+							logsynlist.object(i).numsyns+=1 // increase synapse counter for current location i
+						} else { // physically create a new logical synapse
+							newseg=0
+							i+=1
+							logsyn=new Logical_Synapse(node,distance(loc),loc,i)
+							logsyn.syn=new ScalExp2Syn(loc) // add a new synapse at location
+/*						
+							logsyn.syn.tau1=SYNTAU1
+							logsyn.syn.tau2=SYNTAU2
+							logsyn.syn.e=SYNE
+							logsyn.syn.gmax=SYNG
+*/
+							logsynlist.append(logsyn)
+							node.logsynlist.append(logsyn)
+							node.update_branches(logsyn) // update branch synloglist
+						}
+					}
+				}
+			}
+		}
+	}
+	NLOGSYNS=i+1	// number of actual location (NLOCS<=NSYNS)
+	LOGSYN=BRANCH.logsynlist.object(SLCT_LOGSYN)
+}
+
+

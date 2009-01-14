@@ -1,0 +1,180 @@
+// Channel layout based on Golding et al. (2001)
+// based on Migliore et al. (1999) channels
+// channels perform self-density calculation (in mod file)
+// channels can be scaled!
+// ===============================================================================
+
+// parameters
+// ----------
+
+v_init = -65
+celsius = 34.0
+
+Rm = 40000
+RmDend = Rm
+RmSoma = Rm
+RmAx = Rm
+
+Cm    = 0.75
+CmSoma= Cm
+CmAx  = Cm
+CmDend = Cm
+
+RaAll= 200
+RaSoma = 200
+RaAx = 50
+
+EK = -90
+ENa = 55
+
+// ===============================================================================
+
+// variable defaults
+// -----------------
+
+SGNa = 0.045
+SGKdr = 0.040
+SGKAp = 0.1
+
+AxGNa = SGNa*100
+AxGKdr = SGKdr
+AxGKAp = SGKAp*0.2
+
+DbGNa = SGNa
+DbGKdr = SGKdr
+DbGKAp = SGKAp
+
+// ramp begins with soma density and terminates at RD (ramp distance) at RL (ramp level)
+DaGRLNa = SGNa // Na density at the end of the ramp (by default, no ramp)
+DaPDNa = 300 // ramp distance (where ramp ends)
+DaSFSpmsNa = 0.00005 // rate of sodium density scaling per ms
+DaVeqNa = -60
+DaGKdr = SGKdr
+DaGRLKAp = 0.4 // A density at the end of the ramp
+DaPDKAp = 300 // ramp distance (where ramp ends)
+
+// ===============================================================================
+// user access flag; conductance parameter flag; [gui name]; [variable name];
+// ([] - if user access flag==1)
+// variable value; range distribution formula
+
+subtree = new Subtree("Soma",soma_section_list)
+	channel = new Channel("pas")
+		channel.add_parameter(new Channel_Parameter(0,0,"e_pas",v_init,"e_pas=v_init"))
+		channel.add_parameter(new Channel_Parameter(0,1,"g_pas",1/RmSoma,"g_pas=1/RmSoma"))
+		channel.add_parameter(new Channel_Parameter(0,0,"Ra",RaSoma,"Ra=RaSoma"))
+		channel.add_parameter(new Channel_Parameter(0,0,"cm",CmSoma,"cm=CmSoma"))
+	subtree.add_channel(channel)
+	channel = new Channel("na_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_na_M","g Na+ (fast)","SGNa",SGNa,"gbar_na_M=SGNa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",ENa,"ena=ENa"))
+	subtree.add_channel(channel)
+	channel = new Channel("kdr_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkdrbar_kdr_M","g K+ (dr)","SGKdr",SGKdr,"gkdrbar_kdr_M=SGKdr"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)
+	channel = new Channel("kap_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkabar_kap_M","g K+ (Ap)","SGKAp",SGKAp,"gkabar_kap_M=SGKAp"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)
+LAYOUT.add_subtree(subtree)
+
+subtree = new Subtree("Basal Dendrite",dendrite_basal_section_list)
+	channel = new Channel("pas")
+		channel.add_parameter(new Channel_Parameter(0,0,"e_pas",v_init,"e_pas=v_init"))
+		channel.add_parameter(new Channel_Parameter(0,1,"g_pas",1/RmDend,"g_pas=1/RmDend if (distance(x)>100) { g_pas*=2 }")) // spine compensation
+		channel.add_parameter(new Channel_Parameter(0,0,"Ra",RaAll,"Ra=RaAll"))
+		channel.add_parameter(new Channel_Parameter(0,0,"cm",CmDend,"cm=CmDend if (distance(x)>100) { cm*=2 }")) // spine compensation
+	subtree.add_channel(channel)
+	channel = new Channel("na_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_na_M","g Na+","DbGNa",DbGNa,"gbar_na_M=DbGNa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",ENa,"ena=ENa"))
+	subtree.add_channel(channel)
+	channel = new Channel("kdr_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkdrbar_kdr_M","g K+ (dr)","DbGKdr",DbGKdr,"gkdrbar_kdr_M=DbGKdr"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)
+	channel = new Channel("kap_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkabar_kap_M","g K+ (Ap)","DbGKAp",DbGKAp,"gkabar_kap_M=DbGKAp"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)
+LAYOUT.add_subtree(subtree)
+
+// non uniform density
+// -------------------
+/*
+proc apical_x() { local xrd,y0,yrl,m,xdist
+	xrd=$1 // ramp distance - where does it end
+	y0=$2 // level at beginning of ramp
+	yrl=$3 // level at end of ramp
+	if (xrd>0) { m=(yrl-y0)/xrd // ramp slope
+	} else { m=0 }
+	xdist=distance(x)
+	if (xdist>xrd) {
+		sprint(cmd,"%s=%g",param.param_name,yrl)
+		execute(cmd)
+	} else {
+		sprint(cmd,"%s=%g",param.param_name,y0+m*xdist)
+		execute(cmd)
+	}
+}
+*/
+proc ramp_density() { local dist,x1,y0,y1
+	for (x) {
+		sprint(cmd,"dist_%s(x)=distance(%g)",param.param_name,x)
+		execute(cmd)
+		sprint(cmd,"x1_%s(x)=%g",param.param_name,$1) // ramp distance - where does it end
+		execute(cmd)
+		sprint(cmd,"y0_%s(x)=%g",param.param_name,$2) // level at beginning of ramp
+		execute(cmd)
+		sprint(cmd,"y1_%s(x)=%g",param.param_name,$3) // level at end of ramp
+		execute(cmd)
+	}
+}
+
+subtree = new Subtree("Apical Dendrite",dendrite_apical_section_list)
+	channel = new Channel("pas")
+		channel.add_parameter(new Channel_Parameter(0,0,"e_pas",v_init,"e_pas=v_init"))
+		channel.add_parameter(new Channel_Parameter(0,1,"g_pas",1/RmDend,"g_pas=1/RmDend if (distance(x)>100) { g_pas*=2 }")) // spine compensation
+		channel.add_parameter(new Channel_Parameter(0,0,"Ra",RaAll,"Ra=RaAll"))
+		channel.add_parameter(new Channel_Parameter(0,0,"cm",CmDend,"cm=CmDend if (distance(x)>100) { cm*=2 }")) // spine compensation
+	subtree.add_channel(channel)
+	channel = new Channel("scna")
+		channel.add_parameter(new Channel_Parameter(1,1,"scna","g (platau) Na+ (fast)","DaGRLNa",DaGRLNa,"ramp_density(DaPDNa,SGNa,DaGRLNa)"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",ENa,"ena=ENa"))
+		channel.add_parameter(new Channel_Parameter(1,0,"scna","Veq Na+","DaVeqNa",DaVeqNa,"for (x) { veq_scna(x)=DaVeqNa }"))
+		channel.add_parameter(new Channel_Parameter(1,0,"scna","slope/ms Na+","DaSFSpmsNa",DaSFSpmsNa,"for (x) { eta_scna(x)=DaSFSpmsNa*dt }"))
+	subtree.add_channel(channel)
+	channel = new Channel("kdr_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkdrbar_kdr_M","g K+ (dr)","DaGKdr",DaGKdr,"gkdrbar_kdr_M=DaGKdr"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)
+	channel = new Channel("sckap")
+		channel.add_parameter(new Channel_Parameter(1,1,"sckap","g (platau) K+ (Ap)","DaGRLKAp",DaGRLKAp,"ramp_density(DaPDKAp,SGKAp,DaGRLKAp)"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)
+LAYOUT.add_subtree(subtree)
+
+subtree = new Subtree("Axon",axon_section_list)
+	channel = new Channel("pas")
+		channel.add_parameter(new Channel_Parameter(0,0,"e_pas",v_init,"e_pas=v_init"))
+		channel.add_parameter(new Channel_Parameter(0,1,"g_pas",1/RmAx,"g_pas=1/RmAx"))
+		channel.add_parameter(new Channel_Parameter(0,0,"Ra",RaAx,"Ra=RaAx"))
+		channel.add_parameter(new Channel_Parameter(0,0,"cm",CmAx,"cm=CmAx"))
+	subtree.add_channel(channel)
+	channel = new Channel("nax_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gbar_nax_M","g Na+ (fast)","AxGNa",AxGNa,"gbar_nax_M=AxGNa"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ena",ENa,"ena=ENa"))
+	subtree.add_channel(channel)
+	channel = new Channel("kdr_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkdrbar_kdr_M","g K+ (dr)","AxGKdr",AxGKdr,"gkdrbar_kdr_M=AxGKdr"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)
+	channel = new Channel("kap_M")
+		channel.add_parameter(new Channel_Parameter(1,1,"gkabar_kap_M","g K+ (Ap)","AxGKAp",AxGKAp,"gkabar_kap_M=AxGKAp"))
+		channel.add_parameter(new Channel_Parameter(0,0,"ek",EK,"ek=EK"))
+	subtree.add_channel(channel)
+LAYOUT.add_subtree(subtree)
+
+
+// --------------------------------------------------------------------------------------

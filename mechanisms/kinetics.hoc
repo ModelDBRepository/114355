@@ -1,0 +1,205 @@
+// an independent program used to study channel kinetics
+
+load_file("nrngui.hoc")
+
+dt=1/40
+v_init = -65
+
+Vmin=-120 // voltage range for I-V curve
+Vmax=0
+dV=5
+Vhold=v_init
+Vstep=0
+Tstart=5
+Tdur=1000
+tstop=Tstart+Tdur
+CHANNUM=0
+
+FARADAY=96520
+PI=3.14159
+celsius = 34//37
+
+RM=28000//30000
+CM=1
+RA=150
+
+ENA=55
+EK=-90
+EH=-30
+
+// ---------------------------------------------------------------------------
+
+objref vc,I,V,Irec,time
+objref Is[1]
+objref chan,chanlist
+objref cbox
+objref gIV,gI
+strdef cmd,str_chan
+
+create soma
+
+proc create_soma() {
+	 access soma
+	 diam=10 L=20
+	 insert pas
+	 e_pas=v_init
+	 g_pas = 1/RM
+	 Ra=RA
+	 cm=CM
+}
+
+//////////////////////////////////////////////////////////////////////
+begintemplate Channel
+
+public suffix,Ename,E,gname,g,Iname,peak
+strdef suffix,Ename,gname,Iname
+
+proc init() {
+	 suffix=$s1
+	 Ename=$s2
+	 E=$3
+	 gname=$s4
+	 g=$5
+	 Iname=$s6
+	 peak=$7
+}
+
+endtemplate Channel
+//\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+
+proc prepare_chanlist() {
+	 chanlist=new List()
+	 chanlist.append(new Channel("hd_M","ehd_hd_M",EH,"ghdbar_hd_M",0.0003,"i_hd",0))
+//	 chanlist.append(new Channel("na_MS","ena",ENA,"gbar_na_MS",20,"ina",1))
+	 chanlist.append(new Channel("na_M","ena",ENA,"gbar_na_M",0.0032,"ina",1))
+	 chanlist.append(new Channel("kap_M","ek",EK,"gkabar_kap_M",0.01,"ik",1))
+//	 chanlist.append(new Channel("nax_M","ena",ENA,"gbar_nax_M",0.0032,"ina",1))
+//	 chanlist.append(new Channel("na","ena",55,"gna_na",0.024,"ina",1))
+//	 chanlist.append(new Channel("kd_M","ek",-90,"gk_kd_M",0.003,"ik",0))
+//	 chanlist.append(new Channel("ka_M","ek",-90,"gk_ka_M",0.0014,"ik",0))
+//	 chanlist.append(new Channel("nap","ena",55,"gna_nap",0.00007,"ina",0))
+//	 chanlist.append(new Channel("ks","ek",-90,"gk_ks",0.001,"ik",0))
+//	 chanlist.append(new Channel("na3","ena",55,"gbar_na3",0.0064,"ina",1))
+	 chanlist.append(new Channel("kdr_M","ek",-90,"gkdrbar_kdr_M",0.001,"ik",0))
+//	 chanlist.append(new Channel("kap","ek",-90,"gkabar_kap",0.0048,"ik",0))
+	 NUMCHANS=chanlist.count()
+	 sprint(str_chan,"%s",chanlist.object(CHANNUM).suffix)
+}
+
+proc prepare_channel() {
+	 chan=chanlist.object(CHANNUM)
+	 sprint(cmd,"uninsert %s",chan.suffix)
+	 execute(cmd)
+	 CHANNUM=$1
+	 chan=chanlist.object(CHANNUM)
+	 sprint(str_chan,"%s",chan.suffix)
+	 sprint(cmd,"insert %s",chan.suffix)
+	 execute(cmd)
+	 sprint(cmd,"%s=%g",chan.Ename,chan.E)
+	 execute(cmd)
+	 sprint(cmd,"%s=%g",chan.gname,chan.g)
+	 execute(cmd)
+}
+
+proc prepare_VC() {
+	 vc = new VClamp(.5)
+	 vc.dur[0] = Tstart
+	 vc.amp[0] = Vhold
+	 vc.dur[1] = Tdur
+	 vc.dur[2] = tstop-Tstart-Tdur
+	 vc.amp[2] = Vhold
+}
+
+proc prepare_vrec() { local k
+	 objref I,V,Irec,time
+	 V=new Vector()
+	 V.indgen(Vmin,Vmax,dV)
+	 N=V.size()
+	 objref Is[N]
+	 I=new Vector()
+	 time=new Vector()
+	 time.indgen(Tstart,Tstart+Tdur,dt)
+	 T=time.size()
+ 	 Irec=new Vector()
+ 	 Irec.record(&vc.i,time)
+}
+
+proc control() {
+	 cbox=new VBox()
+	 cbox.intercept(1)
+	 xpanel("control")
+	 	chanlist.browser("name","suffix")
+		xvalue("Hold","Vhold")
+		xvalue("Vmin","Vmin")
+		xvalue("Vmax","Vmax")
+		xvalue("dV","dV")
+		xvalue("Duration","Tdur",0,"tstop=Tstart+Tdur")
+		xvalue("tstop","tstop")
+		xbutton("Run","run_simulation()")
+		xvalue("Vstep","Vstep")
+		xbutton("Quit","quit()")
+	 xpanel()
+	 newPlotV()
+	 graphItem.size(0,tstop,-5,5)
+	 gIV=new Graph()
+	 gI=new Graph()
+	 graph_resize()
+	 cbox.intercept(0)
+	 cbox.map("control",0,0,-1,1)
+	 chanlist.select_action("prepare_channel(hoc_ac_)")
+	 prepare_channel(CHANNUM)
+	 chanlist.select(CHANNUM)
+	 gI.menu_action("resize","graph_resize")
+}
+
+proc graph_resize() {
+	 gI.size(Tstart,Tstart+Tdur,-5,5)
+}
+
+proc run_simulation() { local k,min,max
+	 prepare_VC()
+	 prepare_vrec()
+//	 graphItem.erase_all()
+//	 graphItem.addexpr("v(0.5)")
+//	 graphItem.addexpr(chan.Iname,2,1)
+	 graphItem.addvar("vc.i",2,1)
+	 for k=0,N-1 {
+	 	 Vstep=V.x(k)
+	 	 vc.amp[1]=Vstep
+		 run()
+	 	 if (chan.peak) { // Na I-V curve computed on peak current and K on steady state current
+			min=Irec.min()
+			max=Irec.max()
+			if (abs(min)>abs(max)) { I.append(max)
+			} else { I.append(min) }
+		 } else {
+			I.append(Irec.x(T-1))
+		 }
+		 Is[k]=Irec.c
+		 Is[k].plot(gI,time)
+	}
+	I.plot(gIV,V)
+	gIV.exec_menu("View = plot")
+	gI.size(0,tstop,I.x(0),I.x(N-1))
+	objref vc
+}
+
+objref psfile,psgraph
+strdef psfilename
+// create a post script file for the plot
+proc create_post_script_file() {
+	 psgraph=$o1
+	 psfile=new File()
+	 psfile.chooser("w","Write Plot","*.eps","accept","cancel","../records/results/plots")
+	 psfile.chooser()
+	 psfile.getname(psfilename)
+	 if (strcmp(psfilename,"")) {
+	 	psgraph.printfile(psfilename)
+	 }
+	 psfile.close()
+}
+
+create_soma()
+prepare_chanlist()
+prepare_VC()
+control()

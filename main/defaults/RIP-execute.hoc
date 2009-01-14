@@ -1,0 +1,17 @@
+// RIP Execute
+// ===========
+
+// this is executed after reading from file, so setting is automatically approved (flag=1)
+set_dt(1)
+set_SYNTAU1(1)
+set_SYNTAU2(1)
+set_EXCITATORY(1)
+set_INHIBITORY(1)
+set_SYNE(1)
+set_ISYNE(1)
+correct_SPINEAREA(1)
+channel_update_parameters(1)
+//soma_shrink(1)
+axon_connection(1)
+//axon_length_update(1)
+//axon_diameter_update(1)

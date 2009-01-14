@@ -1,0 +1,71 @@
+
+proc IF_parameters() {
+//	 prevAMPap=AMPap
+	 prevDURap=DURap
+	 DURap=1000
+	 tstop=DURap
+	 sprint(str_tstop,"tstop = %d ms",tstop)
+	 STRT=5
+}
+
+proc IF_stim() {
+	 AMPmin=AMPap
+	 sprint(cmd,"%s imp = new IClamp(0.5)",ORIGIN_NAME)
+	 execute(cmd)
+	 imp.dur = DURap
+	 imp.del = STRT
+}
+
+proc IF_recvec() { local loc
+	 Ivec=new Vector()
+	 Fvec=new Vector()
+}
+	
+proc IF_undo(){
+	 objref Ivec 
+	 objref Fvec
+	 objref imp
+	 objref recspikes
+	 DURap=prevDURap
+//	 AMPap=prevAMPap
+}
+
+proc IF_plot() {
+	strdef sma
+	sprint(sma,"%s.v(0.5)",ORIGIN_NAME)
+	graphItem.size(0,tstop,-80,40)
+	graphItem.addexpr(sma,1,1)
+	graphItem.addexpr("imp.i*10+v_init",3,2)
+	graphItem.align(0,0)	
+	graphItem.label(0.5,0,"time (ms)")
+}
+
+proc IF_begin_simulation() { local i,eta,freq
+	 eta=SFSpms
+	 SFSpms=0
+	 set_SFS(1)
+	 IF_stim()
+	 IF_recvec()
+	 IF_plot()
+	 for i=0,NUMBERap-1 {
+	 	 sprint(cmd,"access %s",ORIGIN_NAME)
+		 execute(cmd)
+	 	 apc=new Spike(0.5)
+		 apc.thresh=SPIKE_THRESHOLD
+		 AMPap=AMPmin+i^2*STEPap
+//		 AMPap=AMPmin+i*STEPap
+		 imp.amp=AMPap
+		 sprint(str_status,"Running I-F curve %d/%d",i+1,NUMBERap)
+		 run()
+		 Ivec.append(AMPap)
+		 freq=apc.spike_freq_count
+		 Fvec.append(freq)
+	 }
+	 AMPap=AMPmin
+	 SFSpms=eta
+	 set_SFS(1)
+	 write_IF_records(NUMBERap,STEPap,AMPmin,Fvec)
+	 str_status="Ready"
+}
+
+ 

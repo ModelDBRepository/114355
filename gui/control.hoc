@@ -1,0 +1,388 @@
+//////////////////////////////////////////////////////////////////////////////////////////////
+//                                       Control Panel
+//                                       =============
+//////////////////////////////////////////////////////////////////////////////////////////////
+
+proc cell_cfg_panel() {
+	 cellbox=new VBox()
+	 cellbox.intercept(1)
+	 	xpanel("title")
+		xlabel("Cell Configuration")
+		xpanel()
+	 	cl1box=new HBox()
+		cl1box.intercept(1)
+			cl2box=new VBox()
+			cl2box.intercept(1)
+				cl3box=new HBox()
+				cl3box.intercept(1)
+					cl4box=new VBox()
+					cl4box.intercept(1)
+						xpanel("morph")
+							xlabel("Morphology")
+						xpanel()
+						morphlist.browser("Name","full_name")
+					cl4box.intercept(0)
+					cl4box.map()
+					cl5box=new VBox()
+					cl5box.intercept(1)
+						xpanel("chann")
+							xlabel("Channel Layout")
+						xpanel()
+						layoutlist.browser("Name","full_name")
+					cl5box.intercept(0)
+					cl5box.map()
+					cl6box=new VBox()
+					cl6box.intercept(1)
+						xpanel("distrib")
+							xlabel("Synapse Distribution")
+						xpanel()
+						distriblist.browser("Name","full_name")
+					cl6box.intercept(0)
+					cl6box.map()
+				cl3box.intercept(0)
+				cl3box.map()
+				xpanel("parameters")
+					xvalue("Synaptic Interval","SYNINT",1,"SYNINT_select()") // cell.hoc
+					xvalue("Segment Length (um)","SEGLEN",1,"SEGLEN_select()") // cell.hoc
+					xvalue("Segment Length2 (um)","SEGLEN2",1,"SEGLEN2_select()") // cell.hoc
+					xvalue("# leaf secs","NLEAFSECS",1,"NLEAFSECS_select()") // cell.hoc
+				xpanel()
+			cl2box.intercept(0)
+			cl2box.map()
+			xpanel("control")
+				xbutton("Done","cell_cfg()") // cell.hoc
+				xbutton("Quit","quit()")
+			xpanel()
+		cl1box.intercept(0)
+		cl1box.map()
+	 cellbox.intercept(0)
+	 cellbox.map("Cell Configuration",0,0,-1,1)
+	 morphlist.select_action("morph_select(hoc_ac_)") // cell.hoc
+	 morphlist.select(SLCT_MORPH)
+	 layoutlist.select_action("layout_select(hoc_ac_)") // cell.hoc
+	 layoutlist.select(SLCT_LAYOUT)
+	 distriblist.select_action("distrib_select(hoc_ac_)") // synapse.hoc
+	 distriblist.select(SLCT_DISTRIB)
+}
+
+proc prepare_control() {
+	 ctrlbox=new HBox()
+	 ctrlbox.intercept(1)
+	 	prmbox=new VBox()
+		prmbox.intercept(1)
+			subpanel_cell()
+			subpanel_run_independent()
+			subpanel_run_dependent()
+		prmbox.intercept(0)
+		prmbox.map()
+		rtbox=new VBox()
+		rtbox.intercept(1)
+			rt1box=new VBox()
+			rt1box.intercept(1)
+				shpbox=new HBox()
+				shpbox.intercept(1)
+					subpanel_select()
+					prepare_shape()
+//					subpanel_test()
+				shpbox.intercept(0)
+				shpbox.map()
+				grfbox=new HBox()
+				grfbox.intercept(1)
+					add_plotter_gui()
+				grfbox.intercept(0)
+				grfbox.map()
+			rt1box.intercept(0)
+			rt1box.map()
+			genbox=new HBox()
+			genbox.intercept(1)
+				subpanel_simulation_control()
+			genbox.intercept(0)
+			genbox.map()
+		rtbox.intercept(0)
+		rtbox.map()
+	 ctrlbox.intercept(0)
+//	 ctrlbox.map("Synaptic Scaling (under construction)",0,0,-1,1)
+//	 ctrlbox.map("Synaptic Scaling (under construction)",400,0,-1,1)
+	 ctrlbox.map(str_version)
+}
+// ----------------------------------------------------------------------------
+// sub-panels
+// ----------
+
+proc subpanel_run_dependent() {
+	 rdpbox=new VBox()
+	 rdpbox.intercept(1)
+		cfgbox=new HBox()
+		cfgbox.intercept(1)
+			browser_RDP_list.browser("Name","name")
+			xpanel("buttons")
+				xvalue("RDP","RDPNUMmanual",0,"if (!REALTIME) { RDP_manual_selection() }") // configurations.hoc
+				xbutton("new","if (!REALTIME) { RDP_new() }")
+				xbutton("save","if (!REALTIME) { RDP_save(1) }") // check if modifiable and prompt user
+				xbutton("delete","if (!REALTIME) { RDP_delete() }")
+				xbutton("unlock","if (!REALTIME) { RDP_manual_unlock() }")
+				xbutton("SF copy","make_gmax_copy()") // synapses.hoc
+//				xbutton("spikes copy","")
+			xpanel()
+		cfgbox.intercept(0)
+		cfgbox.map()
+		xpanel("tstop",1)
+			xvalue("TSTOP","TSTOP",1,"set_TSTOP(RDP_check())")
+			xbutton("vivo records","vivo_record_control()") // simulation.hoc
+		xpanel()
+		xpanel("submenues",1)
+			xbutton("input","input_control()") // simulation.hoc
+			xstatebutton("scaling",&scale_enable,"scale_enable=SCALE_ENABLE scaling_control()") // synapses.hoc
+			xbutton("subgroup","subg_control()") // synapses.hoc
+			xbutton("section","selsec_control()") // cell.hoc
+//			xstatebutton("STDP",&STDP_enable,"STDP_enable=STDP_ENABLE STDP_control()") // synapses.hoc
+		xpanel()
+	rdpbox.intercept(0)
+	rdpbox.map()
+	browser_RDP_list.select_action("if (!REALTIME) { RDP_selection(hoc_ac_) }")
+	browser_RDP_list.select(SLCT_RDPNUM)
+}
+
+proc subpanel_run_independent() {
+	ridbox=new VBox()
+	ridbox.intercept(1)
+		ripbox=new HBox()
+		ripbox.intercept(1)
+			browser_RIP_list.browser("Name","name") 
+			xpanel("buttons")
+				xvalue("RIP","RIPNUMmanual",0,"if (!REALTIME) { RIP_manual_selection() }") // configurations.hoc
+				xbutton("new","if (!REALTIME) { RIP_new() }")
+				xbutton("save","if (!REALTIME) { RIP_save(1) }") // check if modifiable and prompt user
+				xbutton("delete","if (!REALTIME) { RIP_delete() }")
+				xbutton("set as default","RIP_set_as_default()")
+			xpanel()
+		ripbox.intercept(0)
+		ripbox.map()
+		xpanel("dt")
+			xvalue("dt","dt",1,"set_dt(RIP_check())") // simulation.hoc
+		xpanel()
+		xpanel("synapse",1)
+			xbutton("synapse parameters","synapse_parameters_control_panel()") // synapses.hoc
+			xstatebutton("excitatory",&EXCITATORY,"set_EXCITATORY(RIP_check())")
+			xstatebutton("inhibitory",&INHIBITORY,"set_INHIBITORY(RIP_check())")
+		xpanel()
+/*		
+		xpanel("synapse",1)
+			xmenu("implimentation")
+				xbutton("conductance","SYNIMP=0 set_SYNIMP(RIP_check())") // synapses.hoc
+				xbutton("current","SYNIMP=1 set_SYNIMP(RIP_check())") // synapses.hoc
+			xmenu()
+			xvarlabel(str_synimp)
+//			xvalue("spine area (um^2)","SPINEAREA",1,"correct_SPINEAREA(RIP_check())") // cell.hoc
+		xpanel()
+*/		
+		xpanel("channel",1)
+			xmenu("Channel Layout")
+				xbutton("Conductance","channel_conductance_control_panel()") // cell.hoc
+				xbutton("Membrane Properties","membrane_properties_control_panel()") // cell.hoc
+			xmenu()
+//			xstatebutton("Soma Normal",&SOMA_ATTACH,"soma_shrink(RIP_check())") // cell.hoc
+			xstatebutton("Axon Attach",&AXON_ATTACH,"axon_connection(RIP_check())") // axon#.hoc
+		xpanel()
+	ridbox.intercept(0)
+	ridbox.map()
+	browser_RIP_list.select_action("if (!REALTIME) { RIP_selection(hoc_ac_) }")
+	browser_RIP_list.select(SLCT_RIPNUM)
+}
+
+proc subpanel_cell() {
+	cllbox=new VBox()
+	cllbox.intercept(1)
+		xpanel("title")
+			xlabel("Cell Properties (unchangeable)")
+		xpanel()
+		cpmbox=new HBox()
+		cpmbox.intercept(1)
+			xpanel("params")
+				sprint (lbl,"Morphology: %s",MORPH.full_name)
+				xlabel(lbl)
+				sprint (lbl,"Channels: %s",LAYOUT.full_name)
+				xlabel(lbl)
+				sprint (lbl,"Syn distribution: %s",DISTRIB.full_name)
+				xlabel(lbl)
+				sprint(lbl,"Syn interval: %3.2f %s",SYNINT,DISTRIB.unitname)
+				xlabel(lbl)
+				sprint(lbl,"Seg length: %3.2f um",SEGLEN)
+				xlabel(lbl)
+			xpanel()
+			xpanel("measures")
+				sprint(lbl,"Dend area: %5.0f um^2",dAREA)
+				xlabel(lbl)
+				sprint(lbl,"Dend length: %5.0f um",dLENG)
+				xlabel(lbl)
+				sprint(lbl,"Num of syns: %d",NSYNS)
+				xlabel(lbl)
+				sprint(lbl,"Num of log syns: %d",NLOGSYNS)
+				xlabel(lbl)
+				sprint(lbl,"Max distance: %g",dMAXDIST)
+				xlabel(lbl)
+			xpanel()
+		cpmbox.intercept(0)
+		cpmbox.map()
+	cllbox.intercept(0)
+	cllbox.map()
+}
+
+proc subpanel_test_analysis() { local i
+	simbox=new VBox()
+	simbox.intercept(1)
+		xpanel("title")
+			xlabel("Test and Analysis")
+		xpanel()
+		xpanel("IClamp")
+			xlabel("IClamp AP")
+			xvalue("amplitude","AMPap",1,"RDP_anal_save()")
+			xvalue("duration","DURap",1,"RDP_anal_save()")
+//			xvalue("step","STEPap",1,"RDP_anal_save()")
+//			xvalue("number","NUMBERap",1,"RDP_anal_save()")
+		xpanel()
+	simbox.intercept(0)
+	simbox.map()
+}
+
+proc subpanel_ISI() { local i
+	isibox=new VBox()
+	isibox.intercept(1)
+		xpanel("ISI")
+			xvarlabel(str_WINDOWstart)
+			xvalue("threshold","SPIKE_THRESHOLD",1)
+			xvalue("start","SPIKEstart",1)
+			xvalue("window","WINDOW",1,"WINDOW_adjust()") // simulation.hoc
+			xvalue("ISI cutoff","CUTOFF",1)
+			xvalue("num bins","NBINS",1)
+		xpanel()
+		xpanel("save",1)
+			xbutton("save","RDP_anal_save()")
+			xbutton("set as default","RDP_anal_default_save()")
+		xpanel()
+	isibox.intercept(0)
+	isibox.map("ISI parameters")
+}
+
+proc subpanel_simulation_control() { local i
+	smsbox=new HBox()
+	smsbox.intercept(1)
+		sm1box=new HBox()
+		sm1box.intercept(1)
+			xpanel("protocols")
+				prtcllist.browser("Name","name")
+			xpanel()
+			xpanel("simulation")
+				simlist.browser("Name","name")
+			xpanel()
+		sm1box.intercept(0)
+		sm1box.map()
+		sm2box=new VBox()
+		sm2box.intercept(1)
+			xpanel("title")
+				xvarlabel(str_status)
+			xpanel()
+			sm3box=new HBox()
+			sm3box.intercept(1)
+				xpanel("buttons")
+					xbutton("add","add_to_simlist()")
+					xbutton("remove","remove_from_simlist()")
+					xbutton("go","run_batch()")
+					xbutton("stop", "stoprun=1")
+					xbutton("Quit","quit_prompt()") // control.hoc
+				xpanel()
+				xpanel("control")
+					xvalue("t","t")
+					xpvalue("Real Time", &realtime)
+					xpvalue("last spike",&SPIKE.spike_time) // cell.hoc (create sections)
+					xpvalue("1/ISI(Hz)",&SPIKE.spike_freq_isi) // cell.hoc (create sections)
+					xpvalue("n/t  (Hz)",&SPIKE.spike_freq_count) // cell.hoc (create 	sections)
+				xpanel()
+			sm3box.intercept(0)
+			sm3box.map()
+		sm2box.intercept(0)
+		sm2box.map()
+	smsbox.intercept(0)
+	smsbox.map()
+	prtcllist.select_action("prtcl_selection(hoc_ac_)")
+	prtcllist.select(PRTCL)
+	simlist.select_action("simulation_selection(hoc_ac_)")
+	simlist.select(SIMNUM)
+}
+
+proc subpanel_test() {
+// 	tstbox=new VBox()
+//	tstbox.intercept(1)
+//		xpanel("select")
+			xmenu("test plot")
+				xbutton("new","real_time_plot()") // plots.hoc
+				xmenu("plot")
+					xbutton("combined","multiple_plotter_plot()")
+				xmenu()
+				xmenu("export")
+					xbutton("save","create_real_time_post_script_file()")
+					xbutton("delete","delete_post_script_file()")
+				xmenu()
+			xmenu()
+			xmenu("shape",1)
+				xmenu("plot")
+					xbutton("trunk","shape_trunk()")
+					xbutton("obliques","shape_obliques()")
+					xbutton("clear","shape_clear()")
+				xmenu()
+				xmenu("export shape",1)
+					xbutton("on","prepare_shape_export(1)")
+					xbutton("off","shape_export=0")
+					xbutton("all","shape_export_all()")
+					xbutton("trunk","shape_export_trunk()")
+					xbutton("obliques","shape_export_obliques()")
+					xbutton("none","shape_export_none()")
+					xbutton("save","create_shape_plot_post_script_file()")
+				xmenu()
+			xmenu()
+//		xpanel()
+//	tstbox.intercept(0)
+//	tstbox.map()
+}
+
+proc subpanel_select() {
+ 	selbox=new VBox()
+	selbox.intercept(1)
+	 	sl1box=new HBox()
+		sl1box.intercept(1)
+			xpanel("title")
+				xvarlabel(SLCT_LOGSYN_name)
+				xvalue("Branch #", "BRANCHmanual", 0, "branch_manual_select()") // sections.hoc
+				xvalue("Logsyn #", "LOGSYNmanual", 0, "logsyn_manual_select()") // sections.hoc
+				subpanel_test()
+				xbutton("IClamp","subpanel_test_analysis()")
+				xbutton("ISI parameters","subpanel_ISI()")
+			xpanel()
+ 			tree.branchlist.browser("","branch_name")
+			browser_logsynlist.browser("","s") // String.s
+		sl1box.intercept(0)
+		sl1box.map()
+	 	sl2box=new HBox()
+		sl2box.intercept(1)
+		sl2box.intercept(0)
+		sl2box.map()
+	selbox.intercept(0)
+	selbox.map()
+	logsynlist.select(SLCT_LOGSYN)
+	tree.branchlist.select_action("branch_select(hoc_ac_)")
+	browser_logsynlist.select_action("logsyn_select(hoc_ac_)")
+	browser_logsynlist.select(SLCT_LOGSYN)
+	tree.branchlist.select(SLCT_BRANCH)
+}
+
+// ----------------------------------------------------------------------------
+
+proc quit_prompt() { local answer
+	dbox=new HBox()
+	answer=dbox.dialog("Are you sure you want to quit?","Yes","No")
+	if (answer) {
+		RIP_save() // configurations.hoc
+		RDP_save() // configurations.hoc
+		quit()
+	}
+}

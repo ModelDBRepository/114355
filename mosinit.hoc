@@ -1,0 +1,7 @@
+load_file("nrngui.hoc")
+load_file("cells/morphologies/ri06.nrn")
+load_file("shapeplot.ses")
+
+print "cells/morphology/ri06.nrn contains the morphology of the"
+print "cell shown in Rabinowitch and Segev 2006 J Neurosci fig 2D"
+print "and Rabinowitch and Segev 2006 J Neurophysiol fig 1A"

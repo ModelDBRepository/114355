@@ -1,0 +1,20 @@
+// simple axon type 1 from Migliore et al. (1999)
+
+create axon[2]
+
+proc create_axon() {
+	 access axon
+	 axon[0]  {nseg=5 diam=1 L=50}
+	 axon[1]  {nseg=10 diam=0.7 L=250}
+	 axon_attach()
+	 axon[0]  connect axon[1](0),1
+}
+
+proc axon_attach() {
+	 sprint(cmd,"%s connect axon[0](0), 0.5",MORPH.origin_name)
+	 execute(cmd)
+}
+
+proc axon_detach() {
+	 axon disconnect()
+}

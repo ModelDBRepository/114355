@@ -1,0 +1,7 @@
+// cell Copy Parameters
+// ====================
+
+copySEGLEN=SEGLEN
+copySYNINT=SYNINT
+copySEGLEN2 = SEGLEN2
+copyNLEAFSECS = NLEAFSECS

@@ -1,9 +1,7 @@
-<html><pre>
-This is the readme for the model associated with the paper
+# This is the readme for the model associated with the paper
 
 Rabinowitch I, Segev I (2006) The interplay between homeostatic
-synaptic plasticity and functional dendritic compartments. J
-Neurophysiol 96:276-83
+synaptic plasticity and functional dendritic compartments. *J Neurophysiol* 96:276-83
 
 These files were supplied by Dr Ithai Rabinowitch.
 
@@ -27,12 +25,11 @@ The basic idea is:
    simulations in sequence (if you want to leave the computer to work
    overnight and run different simulations one after the other).
 
-Usage:
+## Usage:
 
-Download and extract the archive.  Then under
+Download and extract the archive. Then under
 
-unix/linux:
------------
+### unix/linux:
 
 cd main
 nrnivmodl ../mechanisms
@@ -41,28 +38,28 @@ nrngui main.hoc
 In the first selection window choose Spruston2 (not 3) and in the
 Migliore2 Channel layout and Segment length 20.
 
-<img src="./screenshot1.jpg" alt="screenshot 1">
+![screenshot 1](./screenshot1.jpg)
 
 Then click 'Done'.
 
 You will be able to get 6 simulation configurations (RIP0: RDP0-5)
 that do the following (the simulations are quite long):
 
-RDP 0: runs in 'frozen' mode, i.e. no plasticity. This is used to get
-a profile of the average membrane potential at each dendritic site (at
-the end of the simulation choose Vavg in one of the two plot windows).
+- **RDP 0**: runs in 'frozen' mode, i.e. no plasticity. This is used to get
+  a profile of the average membrane potential at each dendritic site (at
+  the end of the simulation choose Vavg in one of the two plot windows).
 
-RDP 1: runs with plasticity so that at the end you also get gmax
-values that are different from gmax0
+- **RDP 1**: runs with plasticity so that at the end you also get gmax
+  values that are different from gmax0
 
-RDP 2-5 start with the gmax distribution of RDP1 (since I have already
-run this, their gmax0 is supposed to be stored).
+- **RDP 2-5** start with the gmax distribution of RDP1 (since I have already
+  run this, their gmax0 is supposed to be stored).
 
-RDP 2: local HSP RDP 3: frozen with the gmax0 obtained from RDP2's
-final gmax.
+- **RDP 2**: local HSP
+- **RDP 3**: frozen with the gmax0 obtained from RDP2's final gmax.
 
-RDP 4: global HSP RDP 5: frozen with the gmax0 obtained from RDP4's
-final gmax.
+- **RDP 4**: global HSP
+- **RDP 5**: frozen with the gmax0 obtained from RDP4's final gmax.
 
 ---
 
@@ -71,7 +68,7 @@ you can select Interaction -> distance -> gmax and Interaction ->
 distance -> vmax in the graph windows, then your simulation will look
 like this:
 
-<img src="./screenshot2.jpg" alt="screenshot 2">
+![screenshot 2](./screenshot2.jpg)
 
 I would suggest that you create a new RDP and just set a much shorter
 simulation time (TSTOP under the RDP list). You can then run it to
@@ -83,4 +80,6 @@ of the plasticity mechanism. Create a new RIP configuration (or delete
 the existing one) and change the time scale parameter in the synapse
 parameter dialog box (just under the RIP list).
 
-</pre></html>
+---
+
+2025-06-02: Standardized to Markdown.
